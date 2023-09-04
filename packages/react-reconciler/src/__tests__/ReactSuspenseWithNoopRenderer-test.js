@@ -681,35 +681,23 @@ describe('ReactSuspenseWithNoopRenderer', () => {
 
     // Schedule an update at several distinct expiration times
     await act(async () => {
-      if (gate(flags => flags.enableSyncDefaultUpdates)) {
-        React.startTransition(() => {
-          root.render(<App step={1} shouldSuspend={true} />);
-        });
-      } else {
+      React.startTransition(() => {
         root.render(<App step={1} shouldSuspend={true} />);
-      }
+      });
       Scheduler.unstable_advanceTime(1000);
       await waitFor(['Sibling']);
       interrupt();
 
-      if (gate(flags => flags.enableSyncDefaultUpdates)) {
-        React.startTransition(() => {
-          root.render(<App step={2} shouldSuspend={true} />);
-        });
-      } else {
+      React.startTransition(() => {
         root.render(<App step={2} shouldSuspend={true} />);
-      }
+      });
       Scheduler.unstable_advanceTime(1000);
       await waitFor(['Sibling']);
       interrupt();
 
-      if (gate(flags => flags.enableSyncDefaultUpdates)) {
-        React.startTransition(() => {
-          root.render(<App step={3} shouldSuspend={true} />);
-        });
-      } else {
+      React.startTransition(() => {
         root.render(<App step={3} shouldSuspend={true} />);
-      }
+      });
       Scheduler.unstable_advanceTime(1000);
       await waitFor(['Sibling']);
       interrupt();
@@ -865,18 +853,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     );
     await waitForAll([]);
     expect(root).toMatchRenderedOutput(null);
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
-      React.startTransition(() => {
-        root.render(
-          <>
-            <Suspense fallback={<Text text="Loading..." />}>
-              <AsyncText text="Async" />
-              <Text text="Sibling" />
-            </Suspense>
-          </>,
-        );
-      });
-    } else {
+    React.startTransition(() => {
       root.render(
         <>
           <Suspense fallback={<Text text="Loading..." />}>
@@ -885,7 +862,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
           </Suspense>
         </>,
       );
-    }
+    });
     await waitFor(['Suspend! [Async]']);
 
     await resolveText('Async');
@@ -1811,6 +1788,102 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     );
   });
 
+  // @gate enableLegacyCache
+  it('throttles content from appearing if a fallback was filled in recently', async () => {
+    function Foo() {
+      Scheduler.log('Foo');
+      return (
+        <>
+          <Suspense fallback={<Text text="Loading A..." />}>
+            <AsyncText text="A" />
+          </Suspense>
+          <Suspense fallback={<Text text="Loading B..." />}>
+            <AsyncText text="B" />
+          </Suspense>
+        </>
+      );
+    }
+
+    ReactNoop.render(<Foo />);
+    // Start rendering
+    await waitForAll([
+      'Foo',
+      'Suspend! [A]',
+      'Loading A...',
+      'Suspend! [B]',
+      'Loading B...',
+    ]);
+    expect(ReactNoop).toMatchRenderedOutput(
+      <>
+        <span prop="Loading A..." />
+        <span prop="Loading B..." />
+      </>,
+    );
+
+    // Resolve only A. B will still be loading.
+    await act(async () => {
+      await resolveText('A');
+
+      // If we didn't advance the time here, A would not commit; it would
+      // be throttled because the fallback would have appeared too recently.
+      Scheduler.unstable_advanceTime(10000);
+      jest.advanceTimersByTime(10000);
+      await waitForPaint(['A']);
+      expect(ReactNoop).toMatchRenderedOutput(
+        <>
+          <span prop="A" />
+          <span prop="Loading B..." />
+        </>,
+      );
+    });
+
+    // Advance by a small amount of time. For testing purposes, this is meant
+    // to be just under the throttling interval. It's a heurstic, though, so
+    // if we adjust the heuristic we might have to update this test, too.
+    Scheduler.unstable_advanceTime(200);
+    jest.advanceTimersByTime(200);
+
+    // Now resolve B.
+    await act(async () => {
+      await resolveText('B');
+      await waitForPaint(['B']);
+
+      if (gate(flags => flags.alwaysThrottleRetries)) {
+        // B should not commit yet. Even though it's been a long time since its
+        // fallback was shown, it hasn't been long since A appeared. So B's
+        // appearance is throttled to reduce jank.
+        expect(ReactNoop).toMatchRenderedOutput(
+          <>
+            <span prop="A" />
+            <span prop="Loading B..." />
+          </>,
+        );
+
+        // Advance time a little bit more. Now it commits because enough time
+        // has passed.
+        Scheduler.unstable_advanceTime(100);
+        jest.advanceTimersByTime(100);
+        await waitForAll([]);
+        expect(ReactNoop).toMatchRenderedOutput(
+          <>
+            <span prop="A" />
+            <span prop="B" />
+          </>,
+        );
+      } else {
+        // Old behavior, gated until this rolls out at Meta:
+        //
+        // B appears immediately, without being throttled.
+        expect(ReactNoop).toMatchRenderedOutput(
+          <>
+            <span prop="A" />
+            <span prop="B" />
+          </>,
+        );
+      }
+    });
+  });
+
   // TODO: flip to "warns" when this is implemented again.
   // @gate enableLegacyCache
   it('does not warn when a low priority update suspends inside a high priority update for functional components', async () => {
@@ -2160,26 +2233,26 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     await waitForAll(['Foo', 'A']);
     expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
 
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
+    if (gate(flags => flags.forceConcurrentByDefaultForTesting)) {
+      ReactNoop.render(<Foo showB={true} />);
+    } else {
       React.startTransition(() => {
         ReactNoop.render(<Foo showB={true} />);
       });
-    } else {
-      ReactNoop.render(<Foo showB={true} />);
     }
 
     await waitForAll(['Foo', 'A', 'Suspend! [B]', 'Loading B...']);
 
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
-      // Transitions never fall back.
-      expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
-    } else {
+    if (gate(flags => flags.forceConcurrentByDefaultForTesting)) {
       expect(ReactNoop).toMatchRenderedOutput(
         <>
           <span prop="A" />
           <span prop="Loading B..." />
         </>,
       );
+    } else {
+      // Transitions never fall back.
+      expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
     }
   });
 
@@ -2205,13 +2278,9 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     await waitForAll(['Foo', 'A']);
     expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
 
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
-      React.startTransition(() => {
-        ReactNoop.render(<Foo showB={true} />);
-      });
-    } else {
+    React.startTransition(() => {
       ReactNoop.render(<Foo showB={true} />);
-    }
+    });
 
     await waitForAll([
       'Foo',
@@ -2226,12 +2295,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     Scheduler.unstable_advanceTime(600);
     await advanceTimers(600);
 
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
-      // Transitions never fall back.
-      expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
-    } else {
-      expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
-    }
+    expect(ReactNoop).toMatchRenderedOutput(<span prop="A" />);
   });
 
   describe('startTransition', () => {
@@ -3441,7 +3505,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
   });
 
   // @gate enableLegacyCache
-  // @gate !enableSyncDefaultUpdates
+  // @gate forceConcurrentByDefaultForTesting
   it('regression: ping at high priority causes update to be dropped', async () => {
     const {useState, useTransition} = React;
 

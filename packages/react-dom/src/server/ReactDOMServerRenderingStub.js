@@ -7,7 +7,16 @@
  * @flow
  */
 
-export {preinit, preload, preconnect, prefetchDNS} from '../ReactDOMFloat';
+export {
+  preinit,
+  preload,
+  preconnect,
+  prefetchDNS,
+} from '../shared/ReactDOMFloat';
+export {
+  useFormStatus as experimental_useFormStatus,
+  useFormState as experimental_useFormState,
+} from 'react-dom-bindings/src/shared/ReactDOMFormActions';
 
 export function createPortal() {
   throw new Error(
@@ -25,3 +34,13 @@ export function flushSync() {
       ' to not call flushSync no the server.',
   );
 }
+
+// on the server we just call the callback because there is
+// not update mechanism. Really this should not be called on the
+// server but since the semantics are generally clear enough we
+// can provide this trivial implementation.
+function batchedUpdates<A, R>(fn: A => R, a: A): R {
+  return fn(a);
+}
+
+export {batchedUpdates as unstable_batchedUpdates};

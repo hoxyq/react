@@ -14,7 +14,7 @@ import type {ServerManifest} from 'react-client/src/ReactFlightClientConfig';
 
 import {
   createRequest,
-  startWork,
+  startRender,
   startFlowing,
   abort,
 } from 'react-server/src/ReactFlightServer';
@@ -27,11 +27,18 @@ import {
 
 import {decodeAction} from 'react-server/src/ReactFlightActionServer';
 
+export {
+  registerServerReference,
+  registerClientReference,
+  createClientModuleProxy,
+} from './ReactFlightWebpackReferences';
+
 type Options = {
   identifierPrefix?: string,
   signal?: AbortSignal,
   context?: Array<[string, ServerContextJSONValue]>,
   onError?: (error: mixed) => void,
+  onPostpone?: (reason: string) => void,
 };
 
 function renderToReadableStream(
@@ -45,6 +52,7 @@ function renderToReadableStream(
     options ? options.onError : undefined,
     options ? options.context : undefined,
     options ? options.identifierPrefix : undefined,
+    options ? options.onPostpone : undefined,
   );
   if (options && options.signal) {
     const signal = options.signal;
@@ -62,7 +70,7 @@ function renderToReadableStream(
     {
       type: 'bytes',
       start: (controller): ?Promise<void> => {
-        startWork(request);
+        startRender(request);
       },
       pull: (controller): ?Promise<void> => {
         startFlowing(request, controller);

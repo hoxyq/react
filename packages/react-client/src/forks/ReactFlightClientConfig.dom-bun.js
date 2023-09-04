@@ -8,7 +8,6 @@
  */
 
 export * from 'react-client/src/ReactFlightClientConfigBrowser';
-export * from 'react-client/src/ReactFlightClientConfigStream';
 export * from 'react-dom-bindings/src/shared/ReactFlightClientConfigDOM';
 
 export type Response = any;
@@ -21,3 +20,4 @@ export const resolveClientReference: any = null;
 export const resolveServerReference: any = null;
 export const preloadModule: any = null;
 export const requireModule: any = null;
+export const usedWithSSR = true;

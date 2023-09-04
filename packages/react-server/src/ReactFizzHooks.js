@@ -10,16 +10,14 @@
 import type {Dispatcher} from 'react-reconciler/src/ReactInternalTypes';
 
 import type {
-  MutableSource,
-  MutableSourceGetSnapshotFn,
-  MutableSourceSubscribeFn,
   ReactContext,
   StartTransitionOptions,
   Thenable,
   Usable,
+  ReactCustomFormAction,
 } from 'shared/ReactTypes';
 
-import type {ResponseState} from './ReactFizzConfig';
+import type {ResumableState} from './ReactFizzConfig';
 import type {Task} from './ReactFizzServer';
 import type {ThenableState} from './ReactFizzThenable';
 import type {TransitionStatus} from './ReactFizzConfig';
@@ -43,6 +41,7 @@ import {
   REACT_CONTEXT_TYPE,
   REACT_MEMO_CACHE_SENTINEL,
 } from 'shared/ReactSymbols';
+import {checkAttributeStringCoercion} from 'shared/CheckStringCoercion';
 
 type BasicStateAction<S> = (S => S) | S;
 type Dispatch<A> = A => void;
@@ -505,18 +504,6 @@ export function useEffectEvent<Args, Return, F: (...Array<Args>) => Return>(
   return throwOnUseEffectEventCall;
 }
 
-// TODO Decide on how to implement this hook for server rendering.
-// If a mutation occurs during render, consider triggering a Suspense boundary
-// and falling back to client rendering.
-function useMutableSource<Source, Snapshot>(
-  source: MutableSource<Source>,
-  getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
-  subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
-): Snapshot {
-  resolveCurrentlyRenderingComponent();
-  return getSnapshot(source._source);
-}
-
 function useSyncExternalStore<T>(
   subscribe: (() => void) => () => void,
   getSnapshot: () => T,
@@ -565,19 +552,59 @@ function useOptimistic<S, A>(
   return [passthrough, unsupportedSetOptimisticState];
 }
 
+function useFormState<S, P>(
+  action: (S, P) => Promise<S>,
+  initialState: S,
+  permalink?: string,
+): [S, (P) => void] {
+  resolveCurrentlyRenderingComponent();
+
+  // Bind the initial state to the first argument of the action.
+  // TODO: Use the keypath (or permalink) to check if there's matching state
+  // from the previous page.
+  const boundAction = action.bind(null, initialState);
+
+  // Wrap the action so the return value is void.
+  const dispatch = (payload: P): void => {
+    boundAction(payload);
+  };
+
+  // $FlowIgnore[prop-missing]
+  if (typeof boundAction.$$FORM_ACTION === 'function') {
+    // $FlowIgnore[prop-missing]
+    dispatch.$$FORM_ACTION = (prefix: string) => {
+      // $FlowIgnore[prop-missing]
+      const metadata: ReactCustomFormAction = boundAction.$$FORM_ACTION(prefix);
+      // Override the action URL
+      if (permalink !== undefined) {
+        if (__DEV__) {
+          checkAttributeStringCoercion(permalink, 'target');
+        }
+        metadata.action = permalink + '';
+      }
+      return metadata;
+    };
+  } else {
+    // This is not a server action, so the permalink argument has
+    // no effect. The form will have to be hydrated before it's submitted.
+  }
+
+  return [initialState, dispatch];
+}
+
 function useId(): string {
   const task: Task = (currentlyRenderingTask: any);
   const treeId = getTreeId(task.treeContext);
 
-  const responseState = currentResponseState;
-  if (responseState === null) {
+  const resumableState = currentResumableState;
+  if (resumableState === null) {
     throw new Error(
       'Invalid hook call. Hooks can only be called inside of the body of a function component.',
     );
   }
 
   const localId = localIdCounter++;
-  return makeId(responseState, treeId, localId);
+  return makeId(resumableState, treeId, localId);
 }
 
 function use<T>(usable: Usable<T>): T {
@@ -648,7 +675,6 @@ export const HooksDispatcher: Dispatcher = {
   useTransition,
   useId,
   // Subscriptions are not setup in a server environment.
-  useMutableSource,
   useSyncExternalStore,
 };
 
@@ -666,11 +692,12 @@ if (enableFormActions && enableAsyncActions) {
 }
 if (enableAsyncActions) {
   HooksDispatcher.useOptimistic = useOptimistic;
+  HooksDispatcher.useFormState = useFormState;
 }
 
-export let currentResponseState: null | ResponseState = (null: any);
-export function setCurrentResponseState(
-  responseState: null | ResponseState,
+export let currentResumableState: null | ResumableState = (null: any);
+export function setCurrentResumableState(
+  resumableState: null | ResumableState,
 ): void {
-  currentResponseState = responseState;
+  currentResumableState = resumableState;
 }

@@ -11,8 +11,10 @@ import type {
   PrefetchDNSOptions,
   PreconnectOptions,
   PreloadOptions,
+  PreloadModuleOptions,
   PreinitOptions,
-} from 'react-dom/src/ReactDOMDispatcher';
+  PreinitModuleOptions,
+} from 'react-dom/src/shared/ReactDOMTypes';
 
 import ReactDOMSharedInternals from 'shared/ReactDOMSharedInternals';
 const ReactDOMCurrentDispatcher = ReactDOMSharedInternals.Dispatcher;
@@ -31,7 +33,14 @@ export type HintModel =
   | string
   | [
       string,
-      PrefetchDNSOptions | PreconnectOptions | PreloadOptions | PreinitOptions,
+      (
+        | PrefetchDNSOptions
+        | PreconnectOptions
+        | PreloadOptions
+        | PreloadModuleOptions
+        | PreinitOptions
+        | PreinitModuleOptions
+      ),
     ];
 
 export type Hints = Set<string>;

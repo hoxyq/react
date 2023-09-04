@@ -14,14 +14,17 @@ import {
   mergeOptions,
   stripExternalRuntimeInNodes,
   withLoadingReadyState,
+  getVisibleChildren,
 } from '../test-utils/FizzTestUtils';
 
 let JSDOM;
 let Stream;
 let Scheduler;
 let React;
+let ReactDOM;
 let ReactDOMClient;
 let ReactDOMFizzServer;
+let ReactDOMFizzStatic;
 let Suspense;
 let SuspenseList;
 let useSyncExternalStore;
@@ -73,13 +76,17 @@ describe('ReactDOMFizzServer', () => {
 
     Scheduler = require('scheduler');
     React = require('react');
+    ReactDOM = require('react-dom');
     ReactDOMClient = require('react-dom/client');
     ReactDOMFizzServer = require('react-dom/server');
+    if (__EXPERIMENTAL__) {
+      ReactDOMFizzStatic = require('react-dom/static');
+    }
     Stream = require('stream');
     Suspense = React.Suspense;
     use = React.use;
     if (gate(flags => flags.enableSuspenseList)) {
-      SuspenseList = React.SuspenseList;
+      SuspenseList = React.unstable_SuspenseList;
     }
 
     PropTypes = require('prop-types');
@@ -285,46 +292,6 @@ describe('ReactDOMFizzServer', () => {
         await insertNodesAndExecuteScripts(div, streamingContainer, CSPnonce);
       }
     }, document);
-  }
-
-  function getVisibleChildren(element) {
-    const children = [];
-    let node = element.firstChild;
-    while (node) {
-      if (node.nodeType === 1) {
-        if (
-          node.tagName !== 'SCRIPT' &&
-          node.tagName !== 'script' &&
-          node.tagName !== 'TEMPLATE' &&
-          node.tagName !== 'template' &&
-          !node.hasAttribute('hidden') &&
-          !node.hasAttribute('aria-hidden')
-        ) {
-          const props = {};
-          const attributes = node.attributes;
-          for (let i = 0; i < attributes.length; i++) {
-            if (
-              attributes[i].name === 'id' &&
-              attributes[i].value.includes(':')
-            ) {
-              // We assume this is a React added ID that's a non-visual implementation detail.
-              continue;
-            }
-            props[attributes[i].name] = attributes[i].value;
-          }
-          props.children = getVisibleChildren(node);
-          children.push(React.createElement(node.tagName.toLowerCase(), props));
-        }
-      } else if (node.nodeType === 3) {
-        children.push(node.data);
-      }
-      node = node.nextSibling;
-    }
-    return children.length === 0
-      ? undefined
-      : children.length === 1
-      ? children[0]
-      : children;
   }
 
   function resolveText(text) {
@@ -594,27 +561,93 @@ describe('ReactDOMFizzServer', () => {
           {
             nonce: 'R4nd0m',
             bootstrapScriptContent: 'function noop(){}',
-            bootstrapScripts: ['init.js'],
-            bootstrapModules: ['init.mjs'],
+            bootstrapScripts: [
+              'init.js',
+              {src: 'init2.js', integrity: 'init2hash'},
+            ],
+            bootstrapModules: [
+              'init.mjs',
+              {src: 'init2.mjs', integrity: 'init2hash'},
+            ],
           },
         );
         pipe(writable);
       });
 
-      expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
+      expect(getVisibleChildren(container)).toEqual([
+        <link
+          rel="preload"
+          fetchpriority="low"
+          href="init.js"
+          as="script"
+          nonce={CSPnonce}
+        />,
+        <link
+          rel="preload"
+          fetchpriority="low"
+          href="init2.js"
+          as="script"
+          nonce={CSPnonce}
+          integrity="init2hash"
+        />,
+        <link
+          rel="modulepreload"
+          fetchpriority="low"
+          href="init.mjs"
+          nonce={CSPnonce}
+        />,
+        <link
+          rel="modulepreload"
+          fetchpriority="low"
+          href="init2.mjs"
+          nonce={CSPnonce}
+          integrity="init2hash"
+        />,
+        <div>Loading...</div>,
+      ]);
 
-      // check that there are 4 scripts with a matching nonce:
-      // The runtime script, an inline bootstrap script, and two src scripts
+      // check that there are 6 scripts with a matching nonce:
+      // The runtime script, an inline bootstrap script, two bootstrap scripts and two bootstrap modules
       expect(
         Array.from(container.getElementsByTagName('script')).filter(
           node => node.getAttribute('nonce') === CSPnonce,
         ).length,
-      ).toEqual(4);
+      ).toEqual(6);
 
       await act(() => {
         resolve({default: Text});
       });
-      expect(getVisibleChildren(container)).toEqual(<div>Hello</div>);
+      expect(getVisibleChildren(container)).toEqual([
+        <link
+          rel="preload"
+          fetchpriority="low"
+          href="init.js"
+          as="script"
+          nonce={CSPnonce}
+        />,
+        <link
+          rel="preload"
+          fetchpriority="low"
+          href="init2.js"
+          as="script"
+          nonce={CSPnonce}
+          integrity="init2hash"
+        />,
+        <link
+          rel="modulepreload"
+          fetchpriority="low"
+          href="init.mjs"
+          nonce={CSPnonce}
+        />,
+        <link
+          rel="modulepreload"
+          fetchpriority="low"
+          href="init2.mjs"
+          nonce={CSPnonce}
+          integrity="init2hash"
+        />,
+        <div>Hello</div>,
+      ]);
     } finally {
       CSPnonce = null;
     }
@@ -2507,6 +2540,98 @@ describe('ReactDOMFizzServer', () => {
     },
   );
 
+  it('can hydrate uSES in StrictMode with different client and server snapshot (sync)', async () => {
+    function subscribe() {
+      return () => {};
+    }
+    function getClientSnapshot() {
+      return 'Yay!';
+    }
+    function getServerSnapshot() {
+      return 'Nay!';
+    }
+
+    function App() {
+      const value = useSyncExternalStore(
+        subscribe,
+        getClientSnapshot,
+        getServerSnapshot,
+      );
+      Scheduler.log(value);
+
+      return value;
+    }
+
+    const element = (
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+
+    await act(async () => {
+      const {pipe} = renderToPipeableStream(element);
+      pipe(writable);
+    });
+
+    assertLog(['Nay!']);
+    expect(getVisibleChildren(container)).toEqual('Nay!');
+
+    await clientAct(() => {
+      ReactDOM.flushSync(() => {
+        ReactDOMClient.hydrateRoot(container, element);
+      });
+    });
+
+    expect(getVisibleChildren(container)).toEqual('Yay!');
+    assertLog(['Nay!', 'Yay!']);
+  });
+
+  it('can hydrate uSES in StrictMode with different client and server snapshot (concurrent)', async () => {
+    function subscribe() {
+      return () => {};
+    }
+    function getClientSnapshot() {
+      return 'Yay!';
+    }
+    function getServerSnapshot() {
+      return 'Nay!';
+    }
+
+    function App() {
+      const value = useSyncExternalStore(
+        subscribe,
+        getClientSnapshot,
+        getServerSnapshot,
+      );
+      Scheduler.log(value);
+
+      return value;
+    }
+
+    const element = (
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+
+    await act(async () => {
+      const {pipe} = renderToPipeableStream(element);
+      pipe(writable);
+    });
+
+    assertLog(['Nay!']);
+    expect(getVisibleChildren(container)).toEqual('Nay!');
+
+    await clientAct(() => {
+      React.startTransition(() => {
+        ReactDOMClient.hydrateRoot(container, element);
+      });
+    });
+
+    expect(getVisibleChildren(container)).toEqual('Yay!');
+    assertLog(['Nay!', 'Yay!']);
+  });
+
   it(
     'errors during hydration force a client render at the nearest Suspense ' +
       'boundary, and during the client render it recovers',
@@ -3463,6 +3588,33 @@ describe('ReactDOMFizzServer', () => {
     await waitForAll([]);
   });
 
+  it('takes an importMap option which emits an "importmap" script in the head', async () => {
+    const importMap = {
+      foo: './path/to/foo.js',
+    };
+    await act(() => {
+      renderToPipeableStream(
+        <html>
+          <head>
+            <script async={true} src="foo" />
+          </head>
+          <body>
+            <div>hello world</div>
+          </body>
+        </html>,
+        {
+          importMap,
+        },
+      ).pipe(writable);
+    });
+
+    expect(document.head.innerHTML).toBe(
+      '<script type="importmap">' +
+        JSON.stringify(importMap) +
+        '</script><script async="" src="foo"></script>',
+    );
+  });
+
   describe('error escaping', () => {
     it('escapes error hash, message, and component stack values in directly flushed errors (html escaping)', async () => {
       window.__outlet = {};
@@ -3662,7 +3814,25 @@ describe('ReactDOMFizzServer', () => {
 
     expect(getVisibleChildren(document)).toEqual(
       <html>
-        <head />
+        <head>
+          <link rel="preload" fetchpriority="low" href="foo" as="script" />
+          <link rel="preload" fetchpriority="low" href="bar" as="script" />
+          <link
+            rel="preload"
+            fetchpriority="low"
+            href="baz"
+            as="script"
+            integrity="qux"
+          />
+          <link rel="modulepreload" fetchpriority="low" href="quux" />
+          <link rel="modulepreload" fetchpriority="low" href="corge" />
+          <link
+            rel="modulepreload"
+            fetchpriority="low"
+            href="grault"
+            integrity="garply"
+          />
+        </head>
         <body>
           <div>hello world</div>
         </body>
@@ -3683,7 +3853,95 @@ describe('ReactDOMFizzServer', () => {
     ]);
   });
 
-  describe('bootstrapScriptContent escaping', () => {
+  it('accepts a crossOrigin property for bootstrapScripts and bootstrapModules', async () => {
+    await act(() => {
+      const {pipe} = renderToPipeableStream(
+        <html>
+          <head />
+          <body>
+            <div>hello world</div>
+          </body>
+        </html>,
+        {
+          bootstrapScripts: [
+            'foo',
+            {
+              src: 'bar',
+            },
+            {
+              src: 'baz',
+              crossOrigin: '',
+            },
+            {
+              src: 'qux',
+              crossOrigin: 'defaults-to-empty',
+            },
+          ],
+          bootstrapModules: [
+            'quux',
+            {
+              src: 'corge',
+            },
+            {
+              src: 'grault',
+              crossOrigin: 'use-credentials',
+            },
+          ],
+        },
+      );
+      pipe(writable);
+    });
+
+    expect(getVisibleChildren(document)).toEqual(
+      <html>
+        <head>
+          <link rel="preload" fetchpriority="low" href="foo" as="script" />
+          <link rel="preload" fetchpriority="low" href="bar" as="script" />
+          <link
+            rel="preload"
+            fetchpriority="low"
+            href="baz"
+            as="script"
+            crossorigin=""
+          />
+          <link
+            rel="preload"
+            fetchpriority="low"
+            href="qux"
+            as="script"
+            crossorigin=""
+          />
+          <link rel="modulepreload" fetchpriority="low" href="quux" />
+          <link rel="modulepreload" fetchpriority="low" href="corge" />
+          <link
+            rel="modulepreload"
+            fetchpriority="low"
+            href="grault"
+            crossorigin="use-credentials"
+          />
+        </head>
+        <body>
+          <div>hello world</div>
+        </body>
+      </html>,
+    );
+    expect(
+      stripExternalRuntimeInNodes(
+        document.getElementsByTagName('script'),
+        renderOptions.unstable_externalRuntimeSrc,
+      ).map(n => n.outerHTML),
+    ).toEqual([
+      '<script src="foo" async=""></script>',
+      '<script src="bar" async=""></script>',
+      '<script src="baz" crossorigin="" async=""></script>',
+      '<script src="qux" crossorigin="" async=""></script>',
+      '<script type="module" src="quux" async=""></script>',
+      '<script type="module" src="corge" async=""></script>',
+      '<script type="module" src="grault" crossorigin="use-credentials" async=""></script>',
+    ]);
+  });
+
+  describe('bootstrapScriptContent and importMap escaping', () => {
     it('the "S" in "</?[Ss]cript" strings are replaced with unicode escaped lowercase s or S depending on case, preserving case sensitivity of nearby characters', async () => {
       window.__test_outlet = '';
       const stringWithScriptsInIt =
@@ -3738,6 +3996,24 @@ describe('ReactDOMFizzServer', () => {
         pipe(writable);
       });
       expect(window.__test_outlet).toBe(1);
+    });
+
+    it('escapes </[sS]cirpt> in importMaps', async () => {
+      window.__test_outlet_key = '';
+      window.__test_outlet_value = '';
+      const jsonWithScriptsInIt = {
+        "keypos</script><script>window.__test_outlet_key = 'pwned'</script><script>":
+          'value',
+        key: "valuepos</script><script>window.__test_outlet_value = 'pwned'</script><script>",
+      };
+      await act(() => {
+        const {pipe} = renderToPipeableStream(<div />, {
+          importMap: jsonWithScriptsInIt,
+        });
+        pipe(writable);
+      });
+      expect(window.__test_outlet_key).toBe('');
+      expect(window.__test_outlet_value).toBe('');
     });
   });
 
@@ -5773,5 +6049,203 @@ describe('ReactDOMFizzServer', () => {
     } finally {
       console.error = originalConsoleError;
     }
+  });
+
+  // @gate enablePostpone
+  it('client renders postponed boundaries without erroring', async () => {
+    function Postponed({isClient}) {
+      if (!isClient) {
+        React.unstable_postpone('testing postpone');
+      }
+      return 'client only';
+    }
+
+    function App({isClient}) {
+      return (
+        <div>
+          <Suspense fallback={'loading...'}>
+            <Postponed isClient={isClient} />
+          </Suspense>
+        </div>
+      );
+    }
+
+    const errors = [];
+
+    await act(() => {
+      const {pipe} = renderToPipeableStream(<App isClient={false} />, {
+        onError(error) {
+          errors.push(error.message);
+        },
+      });
+      pipe(writable);
+    });
+
+    expect(getVisibleChildren(container)).toEqual(<div>loading...</div>);
+
+    ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
+      onRecoverableError(error) {
+        errors.push(error.message);
+      },
+    });
+    await waitForAll([]);
+    // Postponing should not be logged as a recoverable error since it's intentional.
+    expect(errors).toEqual([]);
+    expect(getVisibleChildren(container)).toEqual(<div>client only</div>);
+  });
+
+  // @gate enablePostpone
+  it('errors if trying to postpone outside a Suspense boundary', async () => {
+    function Postponed() {
+      React.unstable_postpone('testing postpone');
+      return 'client only';
+    }
+
+    function App() {
+      return (
+        <div>
+          <Postponed />
+        </div>
+      );
+    }
+
+    const errors = [];
+    const fatalErrors = [];
+    const postponed = [];
+    let written = false;
+
+    const testWritable = new Stream.Writable();
+    testWritable._write = (chunk, encoding, next) => {
+      written = true;
+    };
+
+    await act(() => {
+      const {pipe} = renderToPipeableStream(<App />, {
+        onPostpone(reason) {
+          postponed.push(reason);
+        },
+        onError(error) {
+          errors.push(error.message);
+        },
+        onShellError(error) {
+          fatalErrors.push(error.message);
+        },
+      });
+      pipe(testWritable);
+    });
+
+    expect(written).toBe(false);
+    // Postponing is not logged as an error but as a postponed reason.
+    expect(errors).toEqual([]);
+    expect(postponed).toEqual(['testing postpone']);
+    // However, it does error the shell.
+    expect(fatalErrors).toEqual(['testing postpone']);
+  });
+
+  it(
+    'a transition that flows into a dehydrated boundary should not suspend ' +
+      'if the boundary is showing a fallback',
+    async () => {
+      let setSearch;
+      function App() {
+        const [search, _setSearch] = React.useState('initial query');
+        setSearch = _setSearch;
+        return (
+          <div>
+            <div>{search}</div>
+            <div>
+              <Suspense fallback="Loading...">
+                <AsyncText text="Async" />
+              </Suspense>
+            </div>
+          </div>
+        );
+      }
+
+      // Render the initial HTML, which is showing a fallback.
+      await act(() => {
+        const {pipe} = renderToPipeableStream(<App />);
+        pipe(writable);
+      });
+
+      // Start hydrating.
+      await clientAct(() => {
+        ReactDOMClient.hydrateRoot(container, <App />);
+      });
+      expect(getVisibleChildren(container)).toEqual(
+        <div>
+          <div>initial query</div>
+          <div>Loading...</div>
+        </div>,
+      );
+
+      // Before the HTML has streamed in, update the query. The part outside
+      // the fallback should be allowed to finish.
+      await clientAct(() => {
+        React.startTransition(() => setSearch('updated query'));
+      });
+      expect(getVisibleChildren(container)).toEqual(
+        <div>
+          <div>updated query</div>
+          <div>Loading...</div>
+        </div>,
+      );
+    },
+  );
+
+  // @gate enablePostpone
+  it('supports postponing in prerender and resuming later', async () => {
+    let prerendering = true;
+    function Postpone() {
+      if (prerendering) {
+        React.unstable_postpone();
+      }
+      return 'Hello';
+    }
+
+    function App() {
+      return (
+        <div>
+          <Suspense fallback="Loading...">
+            <Postpone />
+          </Suspense>
+        </div>
+      );
+    }
+
+    const prerendered = await ReactDOMFizzStatic.prerenderToNodeStream(<App />);
+    expect(prerendered.postponed).not.toBe(null);
+
+    prerendering = false;
+
+    const resumed = ReactDOMFizzServer.resumeToPipeableStream(
+      <App />,
+      prerendered.postponed,
+    );
+
+    // Create a separate stream so it doesn't close the writable. I.e. simple concat.
+    const preludeWritable = new Stream.PassThrough();
+    preludeWritable.setEncoding('utf8');
+    preludeWritable.on('data', chunk => {
+      writable.write(chunk);
+    });
+
+    await act(() => {
+      prerendered.prelude.pipe(preludeWritable);
+    });
+
+    expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
+
+    const b = new Stream.PassThrough();
+    b.setEncoding('utf8');
+    b.on('data', chunk => {
+      writable.write(chunk);
+    });
+
+    await act(() => {
+      resumed.pipe(writable);
+    });
+
+    // TODO: expect(getVisibleChildren(container)).toEqual(<div>Hello</div>);
   });
 });

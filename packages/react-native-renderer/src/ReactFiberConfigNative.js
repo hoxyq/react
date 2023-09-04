@@ -7,7 +7,7 @@
  * @flow
  */
 
-import type {TouchedViewDataAtPoint} from './ReactNativeTypes';
+import type {InspectorData, TouchedViewDataAtPoint} from './ReactNativeTypes';
 
 // Modules provided by RN:
 import {
@@ -24,7 +24,11 @@ import {
 } from './ReactNativeComponentTree';
 import ReactNativeFiberHostComponent from './ReactNativeFiberHostComponent';
 
-import {DefaultEventPriority} from 'react-reconciler/src/ReactEventPriorities';
+import {
+  DefaultEventPriority,
+  type EventPriority,
+} from 'react-reconciler/src/ReactEventPriorities';
+import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 
 const {get: getViewConfigForType} = ReactNativeViewConfigRegistry;
 
@@ -46,6 +50,7 @@ export type NoTimeout = -1;
 export type TransitionStatus = mixed;
 
 export type RendererInspectionConfig = $ReadOnly<{
+  getInspectorDataForInstance?: (instance: Fiber | null) => InspectorData,
   // Deprecated. Replaced with getInspectorDataForViewAtPoint.
   getInspectorDataForViewTag?: (tag: number) => Object,
   getInspectorDataForViewAtPoint?: (
@@ -217,9 +222,10 @@ export function getChildHostContext(
   }
 }
 
-export function getPublicInstance(instance: Instance): * {
+export function getPublicInstance(instance: Instance): PublicInstance {
   // $FlowExpectedError[prop-missing] For compatibility with Fabric
   if (instance.canonical != null && instance.canonical.publicInstance != null) {
+    // $FlowFixMe[incompatible-return]
     return instance.canonical.publicInstance;
   }
 
@@ -262,7 +268,7 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
   return false;
 }
 
-export function getCurrentEventPriority(): * {
+export function getCurrentEventPriority(): EventPriority {
   return DefaultEventPriority;
 }
 

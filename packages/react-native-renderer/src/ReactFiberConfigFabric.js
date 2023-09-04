@@ -7,13 +7,19 @@
  * @flow
  */
 
-import type {TouchedViewDataAtPoint, ViewConfig} from './ReactNativeTypes';
+import type {
+  InspectorData,
+  TouchedViewDataAtPoint,
+  ViewConfig,
+} from './ReactNativeTypes';
 import {create, diff} from './ReactNativeAttributePayload';
 import {dispatchEvent} from './ReactFabricEventEmitter';
 import {
   DefaultEventPriority,
   DiscreteEventPriority,
+  type EventPriority,
 } from 'react-reconciler/src/ReactEventPriorities';
+import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import {HostText} from 'react-reconciler/src/ReactWorkTags';
 
 // Modules provided by RN:
@@ -93,6 +99,7 @@ export type NoTimeout = -1;
 export type TransitionStatus = mixed;
 
 export type RendererInspectionConfig = $ReadOnly<{
+  getInspectorDataForInstance?: (instance: Fiber | null) => InspectorData,
   // Deprecated. Replaced with getInspectorDataForViewAtPoint.
   getInspectorDataForViewTag?: (tag: number) => Object,
   getInspectorDataForViewAtPoint?: (
@@ -317,7 +324,7 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
   return false;
 }
 
-export function getCurrentEventPriority(): * {
+export function getCurrentEventPriority(): EventPriority {
   const currentEventPriority = fabricGetCurrentEventPriority
     ? fabricGetCurrentEventPriority()
     : null;

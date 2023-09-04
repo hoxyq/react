@@ -167,7 +167,6 @@ function onDisconnected() {
   disconnectedCallback();
 }
 
-// $FlowFixMe[missing-local-annot]
 function onError({code, message}: $FlowFixMe) {
   safeUnmount();
 
@@ -300,8 +299,8 @@ type LoggerOptions = {
 };
 
 function startServer(
-  port?: number = 8097,
-  host?: string = 'localhost',
+  port: number = 8097,
+  host: string = 'localhost',
   httpsOptions?: ServerOptions,
   loggerOptions?: LoggerOptions,
 ): {close(): void} {

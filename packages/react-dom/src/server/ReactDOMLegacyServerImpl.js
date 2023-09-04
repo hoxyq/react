@@ -10,17 +10,17 @@
 import ReactVersion from 'shared/ReactVersion';
 
 import type {ReactNodeList} from 'shared/ReactTypes';
-import type {BootstrapScriptDescriptor} from 'react-dom-bindings/src/server/ReactFizzConfigDOM';
 
 import {
   createRequest,
-  startWork,
+  startRender,
   startFlowing,
   abort,
 } from 'react-server/src/ReactFizzServer';
 
 import {
-  createResponseState,
+  createResumableState,
+  createRenderState,
   createRootFormatContext,
 } from 'react-dom-bindings/src/server/ReactFizzConfigDOMLegacy';
 
@@ -37,7 +37,6 @@ function renderToStringImpl(
   options: void | ServerOptions,
   generateStaticMarkup: boolean,
   abortReason: string,
-  unstable_externalRuntimeSrc?: string | BootstrapScriptDescriptor,
 ): string {
   let didFatal = false;
   let fatalError = null;
@@ -61,13 +60,18 @@ function renderToStringImpl(
   function onShellReady() {
     readyToStream = true;
   }
+  const resumableState = createResumableState(
+    options ? options.identifierPrefix : undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  );
   const request = createRequest(
     children,
-    createResponseState(
-      generateStaticMarkup,
-      options ? options.identifierPrefix : undefined,
-      unstable_externalRuntimeSrc,
-    ),
+    resumableState,
+    createRenderState(resumableState, undefined, generateStaticMarkup),
     createRootFormatContext(),
     Infinity,
     onError,
@@ -75,8 +79,9 @@ function renderToStringImpl(
     onShellReady,
     undefined,
     undefined,
+    undefined,
   );
-  startWork(request);
+  startRender(request);
   // If anything suspended and is still pending, we'll abort it before writing.
   // That way we write only client-rendered boundaries from the start.
   abort(request, abortReason);

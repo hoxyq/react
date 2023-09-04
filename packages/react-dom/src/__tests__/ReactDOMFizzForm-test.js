@@ -23,6 +23,7 @@ let ReactDOMServer;
 let ReactDOMClient;
 let useFormStatus;
 let useOptimistic;
+let useFormState;
 
 describe('ReactDOMFizzForm', () => {
   beforeEach(() => {
@@ -31,6 +32,7 @@ describe('ReactDOMFizzForm', () => {
     ReactDOMServer = require('react-dom/server.browser');
     ReactDOMClient = require('react-dom/client');
     useFormStatus = require('react-dom').experimental_useFormStatus;
+    useFormState = require('react-dom').experimental_useFormState;
     useOptimistic = require('react').experimental_useOptimistic;
     act = require('internal-test-utils').act;
     container = document.createElement('div');
@@ -471,6 +473,28 @@ describe('ReactDOMFizzForm', () => {
   });
 
   // @gate enableFormActions
+  // @gate enableAsyncActions
+  it('useFormState returns initial state', async () => {
+    async function action(state) {
+      return state;
+    }
+
+    function App() {
+      const [state] = useFormState(action, 0);
+      return state;
+    }
+
+    const stream = await ReactDOMServer.renderToReadableStream(<App />);
+    await readIntoContainer(stream);
+    expect(container.textContent).toBe('0');
+
+    await act(async () => {
+      ReactDOMClient.hydrateRoot(container, <App />);
+    });
+    expect(container.textContent).toBe('0');
+  });
+
+  // @gate enableFormActions
   it('can provide a custom action on the server for actions', async () => {
     const ref = React.createRef();
     let foo;
@@ -524,6 +548,7 @@ describe('ReactDOMFizzForm', () => {
 
   // @gate enableFormActions
   it('can provide a custom action on buttons the server for actions', async () => {
+    const hiddenRef = React.createRef();
     const inputRef = React.createRef();
     const buttonRef = React.createRef();
     let foo;
@@ -546,7 +571,7 @@ describe('ReactDOMFizzForm', () => {
     function App() {
       return (
         <form>
-          <input type="hidden" name="foo" value="bar" />
+          <input type="hidden" name="foo" value="bar" ref={hiddenRef} />
           <input
             type="submit"
             formAction={action}
@@ -588,6 +613,8 @@ describe('ReactDOMFizzForm', () => {
       ReactDOMClient.hydrateRoot(container, <App />);
     });
 
+    expect(hiddenRef.current.name).toBe('foo');
+
     submit(inputRef.current);
 
     expect(foo).toBe('bar');
@@ -597,5 +624,54 @@ describe('ReactDOMFizzForm', () => {
     submit(buttonRef.current);
 
     expect(foo).toBe('bar');
+  });
+
+  // @gate enableFormActions
+  it('can hydrate hidden fields in the beginning of a form', async () => {
+    const hiddenRef = React.createRef();
+
+    let invoked = false;
+    function action(formData) {
+      invoked = true;
+    }
+    action.$$FORM_ACTION = function (identifierPrefix) {
+      const extraFields = new FormData();
+      extraFields.append(identifierPrefix + 'hello', 'world');
+      return {
+        action: '',
+        name: identifierPrefix,
+        method: 'POST',
+        encType: 'multipart/form-data',
+        data: extraFields,
+      };
+    };
+    function App() {
+      return (
+        <form action={action}>
+          <input type="hidden" name="bar" defaultValue="baz" ref={hiddenRef} />
+          <input type="text" name="foo" defaultValue="bar" />
+        </form>
+      );
+    }
+
+    const stream = await ReactDOMServer.renderToReadableStream(<App />);
+    await readIntoContainer(stream);
+
+    const barField = container.querySelector('[name=bar]');
+
+    await act(async () => {
+      ReactDOMClient.hydrateRoot(container, <App />);
+    });
+
+    expect(hiddenRef.current).toBe(barField);
+
+    expect(hiddenRef.current.name).toBe('bar');
+    expect(hiddenRef.current.value).toBe('baz');
+
+    expect(container.querySelectorAll('[name=bar]').length).toBe(1);
+
+    submit(hiddenRef.current.form);
+
+    expect(invoked).toBe(true);
   });
 });

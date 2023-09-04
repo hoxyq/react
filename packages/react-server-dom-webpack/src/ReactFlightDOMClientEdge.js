@@ -9,7 +9,7 @@
 
 import type {Thenable} from 'shared/ReactTypes.js';
 
-import type {Response as FlightResponse} from 'react-client/src/ReactFlightClientStream';
+import type {Response as FlightResponse} from 'react-client/src/ReactFlightClient';
 
 import type {SSRManifest} from './ReactFlightClientConfigWebpackBundler';
 
@@ -19,7 +19,9 @@ import {
   reportGlobalError,
   processBinaryChunk,
   close,
-} from 'react-client/src/ReactFlightClientStream';
+} from 'react-client/src/ReactFlightClient';
+
+import {createServerReference as createServerReferenceImpl} from 'react-client/src/ReactFlightReplyClient';
 
 function noServerCall() {
   throw new Error(
@@ -33,7 +35,7 @@ export function createServerReference<A: Iterable<any>, T>(
   id: any,
   callServer: any,
 ): (...A) => Promise<T> {
-  return noServerCall;
+  return createServerReferenceImpl(id, noServerCall);
 }
 
 export type Options = {
