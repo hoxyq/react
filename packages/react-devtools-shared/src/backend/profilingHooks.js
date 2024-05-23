@@ -879,7 +879,7 @@ export function createProfilingHooks({
       }
 
       if (supportsUserTimingV3) {
-        markAndClear(`--schedule-state-update-${lane}-${componentName}`, true);
+        markAndClear(`--schedule-state-update-${lane}-${componentName}`);
       }
     }
   }
