@@ -196,6 +196,7 @@ export function createProfilingHooks({
         const range = ranges[i];
         if (isArray(range) && range.length === 2) {
           const [startStackFrame, stopStackFrame] = ranges[i];
+
           markAndClear(`--react-internal-module-start-${startStackFrame}`);
           markAndClear(`--react-internal-module-stop-${stopStackFrame}`);
         }
