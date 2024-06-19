@@ -793,7 +793,7 @@ export function createProfilingHooks({
     }
 
     if (supportsUserTimingV3) {
-      markAndClear('--render-yield');
+      endMarkAndClear('render-yield');
     }
   }
 
