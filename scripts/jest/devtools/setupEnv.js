@@ -2,6 +2,7 @@
 
 const semver = require('semver');
 const {ReactVersion} = require('../../../ReactVersions');
+const {getTestFlags} = require('../TestFlags');
 
 // DevTools stores preferences between sessions in localStorage
 if (!global.hasOwnProperty('localStorage')) {
@@ -38,6 +39,39 @@ global._test_react_version_focus = (range, testName, callback) => {
 };
 
 global._test_ignore_for_react_version = (testName, callback) => {
+  test.skip(testName, callback);
+};
+
+global._test_react_version_with_gate = (range, gateFn, testName, callback) => {
+  const shouldPass = semver.satisfies(ReactVersionTestingAgainst, range);
+
+  if (shouldPass) {
+    global._test_gate(gateFn, testName, callback);
+  } else {
+    test.skip(testName, callback);
+  }
+};
+
+global._test_react_version_with_gate_focus = (
+  range,
+  gateFn,
+  testName,
+  callback
+) => {
+  const shouldPass = semver.satisfies(ReactVersionTestingAgainst, range);
+
+  if (shouldPass) {
+    global._test_gate_focus(gateFn, testName, callback);
+  } else {
+    test.skip(testName, callback);
+  }
+};
+
+global._test_ignore_for_react_version_with_gate = (
+  gateFn,
+  testName,
+  callback
+) => {
   test.skip(testName, callback);
 };
 
@@ -80,3 +114,73 @@ function lazyRequireFunctionExports(moduleName) {
     });
   });
 }
+
+const expectTestToFail = async (callback, error) => {
+  if (callback.length > 0) {
+    throw Error(
+      'Gated test helpers do not support the `done` callback. Return a ' +
+        'promise instead.'
+    );
+  }
+  try {
+    const maybePromise = callback();
+    if (
+      maybePromise !== undefined &&
+      maybePromise !== null &&
+      typeof maybePromise.then === 'function'
+    ) {
+      await maybePromise;
+    }
+  } catch (testError) {
+    return;
+  }
+  throw error;
+};
+
+const gatedErrorMessage = 'Gated test was expected to fail, but it passed.';
+global._test_gate = (gateFn, testName, callback) => {
+  let shouldPass;
+  try {
+    const flags = getTestFlags();
+    shouldPass = gateFn(flags);
+  } catch (e) {
+    test(testName, () => {
+      throw e;
+    });
+    return;
+  }
+  if (shouldPass) {
+    test(testName, callback);
+  } else {
+    const error = new Error(gatedErrorMessage);
+    Error.captureStackTrace(error, global._test_gate);
+    test(`[GATED, SHOULD FAIL] ${testName}`, () =>
+      expectTestToFail(callback, error));
+  }
+};
+global._test_gate_focus = (gateFn, testName, callback) => {
+  let shouldPass;
+  try {
+    const flags = getTestFlags();
+    shouldPass = gateFn(flags);
+  } catch (e) {
+    test.only(testName, () => {
+      throw e;
+    });
+    return;
+  }
+  if (shouldPass) {
+    test.only(testName, callback);
+  } else {
+    const error = new Error(gatedErrorMessage);
+    Error.captureStackTrace(error, global._test_gate_focus);
+    test.only(`[GATED, SHOULD FAIL] ${testName}`, () =>
+      expectTestToFail(callback, error));
+  }
+};
+
+// Dynamic version of @gate pragma
+global.gate = fn => {
+  const flags = getTestFlags();
+  return fn(flags);
+};

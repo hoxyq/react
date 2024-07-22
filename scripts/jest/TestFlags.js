@@ -1,5 +1,7 @@
 'use strict';
 
+const REACT_VERSION_ENV = process.env.REACT_VERSION;
+
 // These flags can be in a @gate pragma to declare that a test depends on
 // certain conditions. They're like GKs.
 //
@@ -108,6 +110,18 @@ function getTestFlags() {
     },
     {
       get(flags, flagName) {
+        if (
+          typeof flagName === 'string' &&
+          featureFlags[flagName] !== undefined &&
+          REACT_VERSION_ENV != null
+        ) {
+          throw Error(
+            `Attempted to use feature flag "${flagName}" while testing against React v${REACT_VERSION_ENV}. ` +
+              'Consider removing the use of feature flag or only test against experimental version of React, ' +
+              'this can be done by removing @reactVersion pragma.'
+          );
+        }
+
         const flagValue = flags[flagName];
         if (flagValue === undefined && typeof flagName === 'string') {
           throw Error(

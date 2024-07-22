@@ -8,11 +8,17 @@
  */
 
 describe('gate', () => {
-  //@gate false
+  // @gate false
   it('should expect an error for this test', () => {
     throw new Error('This test should fail');
   });
 
-  //@gate true
+  // @reactVersion >= 16.0
+  // @gate false
+  it('should expect an error for this test with reactVersion pragma set', () => {
+    throw new Error('This test should fail');
+  });
+
+  // @gate true
   it('should not an error for this test', () => {});
 });

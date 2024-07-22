@@ -76,6 +76,26 @@ function transform(babel) {
                   callee.name = '_test_ignore_for_react_version';
                 }
               }
+
+              if (
+                callee.name === '_test_gate_focus' ||
+                callee.name === '_test_gate'
+              ) {
+                const comments = getComments(path);
+                const condition = buildGateVersionCondition(comments);
+
+                if (condition !== null) {
+                  callee.name =
+                    callee.name === '_test_gate_focus'
+                      ? '_test_react_version_with_gate_focus'
+                      : '_test_react_version_with_gate';
+
+                  expression.arguments = [condition, ...expression.arguments];
+                } else if (REACT_VERSION_ENV) {
+                  callee.name = '_test_ignore_for_react_version_with_gate';
+                }
+              }
+
               break;
             }
             case 'MemberExpression': {
