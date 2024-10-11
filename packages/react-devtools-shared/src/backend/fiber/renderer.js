@@ -136,6 +136,7 @@ import type {
   CurrentDispatcherRef,
   LegacyDispatcherRef,
   ProfilingSettings,
+  ContextChangeDetails,
 } from '../types';
 import type {
   ComponentFilter,
@@ -1665,14 +1666,18 @@ export function attach(
         if (prevFiber === null) {
           return {
             context: null,
+            contextChangeDetails: null,
             didHooksChange: false,
             isFirstMount: true,
             props: null,
             state: null,
           };
         } else {
+          const [renderedBecauseOfContextChange, contextChangeDetails] =
+            getContextChanged(prevFiber, nextFiber);
           const data: ChangeDescription = {
-            context: getContextChanged(prevFiber, nextFiber),
+            context: renderedBecauseOfContextChange,
+            contextChangeDetails,
             didHooksChange: false,
             isFirstMount: false,
             props: getChangedKeys(
@@ -1695,6 +1700,7 @@ export function attach(
         if (prevFiber === null) {
           return {
             context: null,
+            contextChangeDetails: null,
             didHooksChange: false,
             isFirstMount: true,
             props: null,
@@ -1705,8 +1711,11 @@ export function attach(
             prevFiber.memoizedState,
             nextFiber.memoizedState,
           );
+          const [renderedBecauseOfContextChange, contextChangeDetails] =
+            getContextChanged(prevFiber, nextFiber);
           const data: ChangeDescription = {
-            context: getContextChanged(prevFiber, nextFiber),
+            context: renderedBecauseOfContextChange,
+            contextChangeDetails,
             didHooksChange: indices !== null && indices.length > 0,
             isFirstMount: false,
             props: getChangedKeys(
@@ -1724,7 +1733,10 @@ export function attach(
     }
   }
 
-  function getContextChanged(prevFiber: Fiber, nextFiber: Fiber): boolean {
+  function getContextChanged(
+    prevFiber: Fiber,
+    nextFiber: Fiber,
+  ): [boolean, ContextChangeDetails | null] {
     let prevContext =
       prevFiber.dependencies && prevFiber.dependencies.firstContext;
     let nextContext =
@@ -1741,16 +1753,21 @@ export function attach(
         // context changed value but then we would have exited already. If we end up here
         // it's because a state or props change caused the order of contexts used to change.
         // So the main cause is not the contexts themselves.
-        return false;
+        return [false, null];
       }
       if (!is(prevContext.memoizedValue, nextContext.memoizedValue)) {
-        return true;
+        const resolvedContext = nextContext.context;
+        if (resolvedContext != null && resolvedContext.displayName) {
+          return [true, {contextName: resolvedContext.displayName}];
+        }
+
+        return [true, null];
       }
 
       prevContext = prevContext.next;
       nextContext = nextContext.next;
     }
-    return false;
+    return [false, null];
   }
 
   function isHookThatCanScheduleUpdate(hookObject: any) {

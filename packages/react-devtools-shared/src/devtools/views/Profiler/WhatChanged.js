@@ -63,8 +63,15 @@ export default function WhatChanged({fiberID}: Props): React.Node {
     return null;
   }
 
-  const {context, didHooksChange, hooks, isFirstMount, props, state} =
-    changeDescription;
+  const {
+    context,
+    contextChangeDetails,
+    didHooksChange,
+    hooks,
+    isFirstMount,
+    props,
+    state,
+  } = changeDescription;
 
   if (isFirstMount) {
     return (
@@ -79,27 +86,21 @@ export default function WhatChanged({fiberID}: Props): React.Node {
 
   const changes = [];
 
-  if (context === true) {
-    changes.push(
-      <div key="context" className={styles.Item}>
-        • Context changed
-      </div>,
-    );
-  } else if (
-    typeof context === 'object' &&
-    context !== null &&
-    context.length !== 0
-  ) {
-    changes.push(
-      <div key="context" className={styles.Item}>
-        • Context changed:
-        {context.map(key => (
-          <span key={key} className={styles.Key}>
-            {key}
-          </span>
-        ))}
-      </div>,
-    );
+  if (context) {
+    if (contextChangeDetails) {
+      const {contextName} = contextChangeDetails;
+      changes.push(
+        <div key="context" className={styles.Item}>
+          • {contextName} context changed
+        </div>,
+      );
+    } else {
+      changes.push(
+        <div key="context" className={styles.Item}>
+          • Context changed
+        </div>,
+      );
+    }
   }
 
   if (didHooksChange) {

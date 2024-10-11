@@ -177,8 +177,13 @@ export type ReactRenderer = {
   ...
 };
 
+export type ContextChangeDetails = {
+  contextName: string,
+};
+
 export type ChangeDescription = {
-  context: Array<string> | boolean | null,
+  context: boolean | null,
+  contextChangeDetails: ContextChangeDetails | null,
   didHooksChange: boolean,
   isFirstMount: boolean,
   props: Array<string> | null,
