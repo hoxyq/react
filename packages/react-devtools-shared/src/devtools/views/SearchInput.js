@@ -8,7 +8,14 @@
  */
 
 import * as React from 'react';
-import {useEffect, useRef} from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useDeferredValue,
+  useCallback,
+} from 'react';
+
 import Button from './Button';
 import ButtonIcon from './ButtonIcon';
 import Icon from './Icon';
@@ -36,24 +43,34 @@ export default function SearchInput({
   searchText,
   testName,
 }: Props): React.Node {
+  const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    search(deferredSearchQuery);
+  }, [deferredSearchQuery]);
+
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const resetSearch = () => search('');
-
-  // $FlowFixMe[missing-local-annot]
-  const handleChange = ({currentTarget}) => {
-    search(currentTarget.value);
-  };
-  // $FlowFixMe[missing-local-annot]
-  const handleKeyPress = ({key, shiftKey}) => {
-    if (key === 'Enter') {
-      if (shiftKey) {
-        goToPreviousResult();
-      } else {
-        goToNextResult();
+  const resetSearch = useCallback(() => search(''), [search]);
+  const handleChange = useCallback(
+    ({currentTarget}: SyntheticInputEvent<HTMLInputElement>) => {
+      setSearchQuery(currentTarget.value);
+    },
+    [],
+  );
+  const handleKeyPress = useCallback(
+    ({key, shiftKey}: KeyboardEvent) => {
+      if (key === 'Enter') {
+        if (shiftKey) {
+          goToPreviousResult();
+        } else {
+          goToNextResult();
+        }
       }
-    }
-  };
+    },
+    [goToPreviousResult, goToNextResult],
+  );
 
   // Auto-focus search input
   useEffect(() => {
@@ -91,7 +108,7 @@ export default function SearchInput({
         onKeyPress={handleKeyPress}
         placeholder={placeholder}
         ref={inputRef}
-        value={searchText}
+        value={searchQuery}
       />
       {!!searchText && (
         <React.Fragment>
