@@ -20,6 +20,7 @@
   align-items: center;
   cursor: default;
   user-select: none;
+  transition: transform 0.1s linear;
 }
 
 .SelectedElement {

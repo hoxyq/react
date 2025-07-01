@@ -496,11 +496,17 @@ function updateIndentationSizeVar(
   prevListWidthRef.current = listWidth;
 
   let indentationSize: number = indentationSizeRef.current;
+  let minimalDepthOfVisibleNode = Number.MAX_SAFE_INTEGER;
 
   // eslint-disable-next-line no-for-of-loops/no-for-of-loops
   for (const child of innerDiv.children) {
-    const depth = parseInt(child.getAttribute('data-depth'), 10) || 0;
+    const depthDataAttribute = child.getAttribute('data-depth');
+    const depth = parseInt(depthDataAttribute, 10);
+    if (isNaN(depth)) {
+      continue;
+    }
 
+    minimalDepthOfVisibleNode = Math.min(minimalDepthOfVisibleNode, depth);
     let childWidth: number = 0;
 
     const cachedChildWidth = cachedChildWidths.get(child);
@@ -524,6 +530,14 @@ function updateIndentationSizeVar(
   indentationSize = Math.max(indentationSize, MIN_INDENTATION_SIZE);
   indentationSizeRef.current = indentationSize;
 
+  if (minimalDepthOfVisibleNode === Number.MAX_SAFE_INTEGER) {
+    minimalDepthOfVisibleNode = 0;
+  }
+
+  list.style.setProperty(
+    '--minimal-depth-of-visible-node',
+    minimalDepthOfVisibleNode,
+  );
   list.style.setProperty('--indentation-size', `${indentationSize}px`);
 }
 

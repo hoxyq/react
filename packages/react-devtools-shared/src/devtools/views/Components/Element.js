@@ -151,9 +151,19 @@ export default function Element({data, index, style}: Props): React.Node {
       <div
         className={styles.Wrapper}
         style={{
-          // Left offset presents the appearance of a nested tree structure.
-          // We must use padding rather than margin/left because of the selected background color.
-          transform: `translateX(calc(${depth} * var(--indentation-size)))`,
+          /**
+           * Left offset presents the appearance of a nested tree structure.
+           * We must use padding rather than margin/left because of the selected background color.
+           * This calc function describes the following logic:
+           *   1. Define min_depth = minimal depth of the currently visible nodes
+           *   2. Define relative_depth = depth - min_depth.
+           *   3. If min_depth <= 6, node_offset = depth * indentation-size.
+           *   4. Otherwise, node_offset = (relative_depth + 6) * indentation-size
+           *
+           * The reason for this magic offset of 6 is to move subbranches, where every node has a depth > 6, to the right and
+           * to avoid displaying them in the same way as Root nodes, which have depth = 0.
+           */
+          transform: `translateX(calc((${depth} + min(1, var(--minimal-depth-of-visible-node), max(0, ${depth} - 6)) * (6 - var(--minimal-depth-of-visible-node))) * var(--indentation-size)))`,
         }}>
         {ownerID === null && (
           <ExpandCollapseToggle element={element} store={store} />
