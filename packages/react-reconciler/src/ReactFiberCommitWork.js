@@ -135,6 +135,7 @@ import {
   componentEffectEndTime,
   componentEffectDuration,
   componentEffectErrors,
+  isInsideSubtreeThatCausedSpawnedUpdate,
 } from './ReactProfilerTimer';
 import {
   logComponentRender,
@@ -877,7 +878,10 @@ function commitLayoutEffectOnFiber(
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0
   ) {
-    if (componentEffectDuration > 0.05) {
+    if (
+      componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork)
+    ) {
       logComponentEffect(
         finishedWork,
         componentEffectStartTime,
@@ -1751,7 +1755,8 @@ function commitDeletionEffectsOnFiber(
     (deletedFiber.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(deletedFiber))
   ) {
     logComponentEffect(
       deletedFiber,
@@ -2615,7 +2620,10 @@ function commitMutationEffectsOnFiber(
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0
   ) {
-    if (componentEffectDuration > 0.05) {
+    if (
+      componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork)
+    ) {
       logComponentEffect(
         finishedWork,
         componentEffectStartTime,
@@ -2994,7 +3002,8 @@ export function disappearLayoutEffects(finishedWork: Fiber) {
     (finishedWork.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork))
   ) {
     logComponentEffect(
       finishedWork,
@@ -3228,7 +3237,8 @@ export function reappearLayoutEffects(
     (finishedWork.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork))
   ) {
     logComponentEffect(
       finishedWork,
@@ -4064,7 +4074,10 @@ function commitPassiveMountOnFiber(
       }
     }
     if (componentEffectStartTime >= 0 && componentEffectEndTime >= 0) {
-      if (componentEffectDuration > 0.05) {
+      if (
+        componentEffectDuration > 0.05 ||
+        isInsideSubtreeThatCausedSpawnedUpdate(finishedWork)
+      ) {
         logComponentEffect(
           finishedWork,
           componentEffectStartTime,
@@ -4338,7 +4351,8 @@ export function reconnectPassiveEffects(
     (finishedWork.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork))
   ) {
     logComponentEffect(
       finishedWork,
@@ -4837,7 +4851,8 @@ function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
     (finishedWork.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork))
   ) {
     logComponentEffect(
       finishedWork,
@@ -4946,7 +4961,8 @@ export function disconnectPassiveEffect(finishedWork: Fiber): void {
     (finishedWork.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(finishedWork))
   ) {
     logComponentEffect(
       finishedWork,
@@ -5139,7 +5155,8 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
     (current.mode & ProfileMode) !== NoMode &&
     componentEffectStartTime >= 0 &&
     componentEffectEndTime >= 0 &&
-    componentEffectDuration > 0.05
+    (componentEffectDuration > 0.05 ||
+      isInsideSubtreeThatCausedSpawnedUpdate(current))
   ) {
     logComponentEffect(
       current,

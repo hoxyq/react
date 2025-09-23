@@ -615,3 +615,10 @@ export function trackAnimatingTask(task: ConsoleTask): void {
     animatingTask = task;
   }
 }
+
+export function isInsideSubtreeThatCausedSpawnedUpdate(fiber: Fiber): boolean {
+  return (
+    blockingUpdateType === SPAWNED_UPDATE &&
+    (includesSyncLane(fiber.lanes) || includesBlockingLane(fiber.lanes))
+  );
+}
