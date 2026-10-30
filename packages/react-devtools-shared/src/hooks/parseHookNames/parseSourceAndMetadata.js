@@ -330,9 +330,24 @@ function parseSourceAST(
         );
       }
 
+      // Components can also be defined in inline <script> elements of an HTML document.
+      // The document itself can't be parsed as JavaScript,
+      // so only the script containing the hook call is parsed (and cached separately).
+      const inlineScript = isHTMLDocument(originalSourceCode)
+        ? findInlineScript(
+            originalSourceCode,
+            originalSourceLineNumber,
+            originalSourceColumnNumber,
+          )
+        : null;
+      const cacheKey =
+        inlineScript === null
+          ? originalSourceURL
+          : `${originalSourceURL}:${inlineScript.startIndex}`;
+
       // The cache also serves to deduplicate parsing by URL in our loop over location keys.
       // This may need to change if we switch to async parsing.
-      const sourceMetadata = originalURLToMetadataCache.get(originalSourceURL);
+      const sourceMetadata = originalURLToMetadataCache.get(cacheKey);
       if (sourceMetadata != null) {
         // $FlowFixMe[constant-condition]
         if (__DEBUG__) {
@@ -347,20 +362,30 @@ function parseSourceAST(
           sourceMetadata.originalSourceCode;
       } else {
         try {
+          // Inline scripts are parsed at their position within the HTML document,
+          // so that AST locations match hook locations.
+          const {code, startIndex, startLine, startColumn} = inlineScript ?? {
+            code: originalSourceCode,
+            startIndex: 0,
+            startLine: 1,
+            startColumn: 0,
+          };
+
           // TypeScript is the most commonly used typed JS variant so let's default to it
           // unless we detect explicit Flow usage via the "@flow" pragma.
-          const plugin =
-            originalSourceCode.indexOf('@flow') > 0 ? 'flow' : 'typescript';
+          const plugin = code.indexOf('@flow') > 0 ? 'flow' : 'typescript';
 
           // TODO (named hooks) This is probably where we should check max source length,
           // rather than in loadSourceAndMetatada -> loadSourceFiles().
-          // TODO(#22319): Support source files that are html files with inline script tags.
           const originalSourceAST = withSyncPerfMeasurements(
             '[@babel/parser] parse(originalSourceCode)',
             () =>
-              parse(originalSourceCode, {
+              parse(code, {
                 sourceType: 'unambiguous',
                 plugins: ['jsx', plugin],
+                startIndex,
+                startLine,
+                startColumn,
               }),
           );
           hookParsedMetadata.originalSourceAST = originalSourceAST;
@@ -372,7 +397,7 @@ function parseSourceAST(
             );
           }
 
-          originalURLToMetadataCache.set(originalSourceURL, {
+          originalURLToMetadataCache.set(cacheKey, {
             originalSourceAST,
             originalSourceCode,
           });
@@ -385,6 +410,76 @@ function parseSourceAST(
       }
     },
   );
+}
+
+type InlineScript = {
+  code: string,
+  // Position of the script's content within the HTML document,
+  // in the format @babel/parser expects (1-based line and 0-based column).
+  startIndex: number,
+  startLine: number,
+  startColumn: number,
+};
+
+function isHTMLDocument(sourceCode: string): boolean {
+  // JavaScript source files don't start with a tag.
+  return /^\s*</.test(sourceCode);
+}
+
+// Browsers report Error stack locations of code in inline <script> elements
+// relative to the HTML document, so the location identifies the script.
+function findInlineScript(
+  html: string,
+  lineNumber: number,
+  columnNumber: number,
+): InlineScript | null {
+  const lineStartIndices = getLineStartIndices(html);
+  if (lineNumber < 1 || lineNumber > lineStartIndices.length) {
+    return null;
+  }
+
+  // Error.prototype.stack columns are 1-based but string indices are 0-based.
+  const index =
+    lineStartIndices[lineNumber - 1] + Math.max(columnNumber - 1, 0);
+
+  // HTML comments are matched too, so that commented out <script> elements are skipped.
+  const scriptRegex =
+    /<!--[\s\S]*?-->|(<script\b(?:[^>"']|"[^"]*"|'[^']*')*>)([\s\S]*?)(?:<\/script|$)/gi;
+  let match = scriptRegex.exec(html);
+  while (match != null) {
+    const openingTag = match[1];
+    if (openingTag != null) {
+      const code = match[2];
+      const startIndex = match.index + openingTag.length;
+      if (index >= startIndex && index < startIndex + code.length) {
+        let startLine = lineNumber;
+        while (lineStartIndices[startLine - 1] > startIndex) {
+          startLine--;
+        }
+        return {
+          code,
+          startIndex,
+          startLine,
+          startColumn: startIndex - lineStartIndices[startLine - 1],
+        };
+      }
+    }
+    match = scriptRegex.exec(html);
+  }
+
+  return null;
+}
+
+function getLineStartIndices(sourceCode: string): Array<number> {
+  // Same line terminators as @babel/parser.
+  const lineBreakRegex = /\r\n|[\r\n\u2028\u2029]/g;
+  const lineStartIndices = [0];
+  let match = lineBreakRegex.exec(sourceCode);
+  while (match != null) {
+    lineStartIndices.push(match.index + match[0].length);
+    match = lineBreakRegex.exec(sourceCode);
+  }
+  return lineStartIndices;
 }
 
 function parseSourceMaps(

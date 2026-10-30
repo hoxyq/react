@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Components defined in inline scripts</title>
+    <script type="application/json">{"foo": "bar"}</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- <script src="commented-out.js"></script> -->
+    <script>
+      const {useState} = React;
+
+      function ComponentA() {
+        const [foo] = useState(true);
+        const [bar] = React.useState(true);
+        return null;
+      }
+
+      window.ComponentA = ComponentA;
+    </script>
+    <script type="module">
+      // Modules have their own scope, so this does not conflict with the script above.
+      const {useState} = React;
+
+      function ComponentB() {
+        const [baz] = useState(true);
+        return null;
+      }
+
+      window.ComponentB = ComponentB;
+    </script>
+    <script>function ComponentC() { const [qux] = React.useState(true); return null; } window.ComponentC = ComponentC;</script>
+  </body>
+</html>

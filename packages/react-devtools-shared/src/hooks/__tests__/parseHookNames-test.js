@@ -189,6 +189,43 @@ describe('parseHookNames', () => {
     ]);
   });
 
+  it('should parse names for components defined in inline scripts of an HTML file', async () => {
+    // Simulates a browser running the inline <script> elements of an HTML document,
+    // which reports Error stack locations relative to the document.
+    const {readFileSync} = require('fs');
+    const vm = require('vm');
+    const React = require('react');
+    const path = require.resolve(
+      './__source__/__untransformed__/ComponentsInInlineScripts.html',
+    );
+    const html = readFileSync(path, 'utf8');
+    const window = {};
+    const scriptRegex = /<script(?: type="module")?>([\s\S]*?)<\/script>/g;
+    let match = scriptRegex.exec(html);
+    while (match != null) {
+      const startIndex = match.index + match[0].indexOf('>') + 1;
+      const linesBeforeScript = html.slice(0, startIndex).split('\n');
+      vm.compileFunction(match[1], ['React', 'window'], {
+        filename: path,
+        lineOffset: linesBeforeScript.length - 1,
+        columnOffset: linesBeforeScript[linesBeforeScript.length - 1].length,
+      })(React, window);
+      match = scriptRegex.exec(html);
+    }
+
+    expectHookNamesToEqual(await getHookNamesForComponent(window.ComponentA), [
+      'foo',
+      'bar',
+    ]);
+    // Each script is parsed separately, even though they share the same file.
+    expectHookNamesToEqual(await getHookNamesForComponent(window.ComponentB), [
+      'baz',
+    ]);
+    expectHookNamesToEqual(await getHookNamesForComponent(window.ComponentC), [
+      'qux',
+    ]);
+  });
+
   // TODO Test that cache purge works
 
   // TODO Test that cached metadata is purged when Fast Refresh scheduled
