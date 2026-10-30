@@ -57,7 +57,7 @@ export function CallSiteView({
 
   const [linkIsEnabled, viewSource] = useOpenResource(
     callSite,
-    symbolicatedCallSite == null ? null : symbolicatedCallSite.location,
+    symbolicatedCallSite,
   );
   const [functionName, url, line, column] =
     symbolicatedCallSite !== null ? symbolicatedCallSite.location : callSite;

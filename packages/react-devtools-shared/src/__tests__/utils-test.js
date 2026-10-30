@@ -470,6 +470,39 @@ function f() { }
       const run = url => symbolicateSource(fetch3, url, 4, 10);
       await expect(run('invalid-base.js')).resolves.toStrictEqual(result);
     });
+
+    it('should resolve absolute source paths against the source map URL', async () => {
+      const fs4 = {
+        'https://cdn.test/a.mjs': `${source}https://sourcemaps.test/build/a.mjs.map`,
+        'https://sourcemaps.test/build/a.mjs.map': `{"version":3,"file":"a.mjs","sources":["/home/ci/app/a.mts"],"names":[],"mappings":";;AAAA,cAAsB;AAAtB,SAAgB,CAAC,KAAI,CAAC"}`,
+      };
+      const fetch4 = async url => fs4[url] || null;
+      const run = url => symbolicateSource(fetch4, url, 4, 10);
+      // Like browsers do, so the source can be found in the browser's DevTools.
+      // Code editors get the original path, since it may be a file on the disk.
+      await expect(run('https://cdn.test/a.mjs')).resolves.toStrictEqual({
+        location: ['', 'https://sourcemaps.test/home/ci/app/a.mts', 1, 17],
+        editorLocation: ['', '/home/ci/app/a.mts', 1, 17],
+        ignored: false,
+      });
+    });
+
+    it('should keep absolute source paths if the source map URL cannot be a base URL', async () => {
+      const sourceMap = `{"version":3,"file":"a.mjs","sources":["/home/me/app/a.mts"],"names":[],"mappings":";;AAAA,cAAsB;AAAtB,SAAgB,CAAC,KAAI,CAAC"}`;
+      const sourceMapURL = `data:application/json;base64,${Buffer.from(
+        sourceMap,
+      ).toString('base64')}`;
+      const fs5 = {
+        'http://test/a.mjs': `${source}${sourceMapURL}`,
+        [sourceMapURL]: sourceMap,
+      };
+      const fetch5 = async url => fs5[url] || null;
+      const run = url => symbolicateSource(fetch5, url, 4, 10);
+      await expect(run('http://test/a.mjs')).resolves.toStrictEqual({
+        location: ['', '/home/me/app/a.mts', 1, 17],
+        ignored: false,
+      });
+    });
   });
 
   describe('formatConsoleArguments', () => {

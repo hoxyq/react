@@ -99,7 +99,7 @@ function FormattedSourceString({source, symbolicatedSourcePromise}: Props) {
 
   const [linkIsEnabled, viewSource] = useOpenResource(
     source,
-    symbolicatedSource == null ? null : symbolicatedSource.location,
+    symbolicatedSource,
   );
 
   const [, sourceURL, line, column] =

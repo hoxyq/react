@@ -19,6 +19,10 @@ const symbolicationCache: Map<
 
 export type SourceMappedLocation = {
   location: ReactFunctionLocation,
+  // Set if the source map lists an absolute path, like /Users/me/app/x.js.
+  // The location has it resolved against the source map URL, like browsers do,
+  // but it may be a file on the disk, which code editors can only open by path.
+  editorLocation?: ReactFunctionLocation,
   ignored: boolean, // Whether the file for this location was ignore listed
 };
 
@@ -124,14 +128,40 @@ export async function symbolicateSource(
           } catch (e) {
             // This is not valid URL
             if (
-              // sourceMapURL = /file
-              possiblyURL.startsWith('/') ||
               // sourceMapURL = C:\\...
               possiblyURL.slice(1).startsWith(':\\\\')
             ) {
               // This is an absolute path
               return {
                 location: [functionName, possiblyURL, line, column],
+                ignored,
+              };
+            }
+
+            if (possiblyURL.startsWith('/')) {
+              // This is an absolute path, but not an absolute URL, so browsers resolve it
+              // against the source map URL. Do the same to find it in the browser's DevTools.
+              // possiblyURL = /src/x.js, sourceMapURL = https://react.dev/script.js.map
+              // -> https://react.dev/src/x.js
+              const editorLocation: ReactFunctionLocation = [
+                functionName,
+                possiblyURL,
+                line,
+                column,
+              ];
+              let absoluteSourceURL;
+              try {
+                absoluteSourceURL = new URL(
+                  possiblyURL,
+                  sourceMapURL,
+                ).toString();
+              } catch (_e) {
+                // The source map URL can't be a base, e.g. it's a data: URL.
+                return {location: editorLocation, ignored};
+              }
+              return {
+                location: [functionName, absoluteSourceURL, line, column],
+                editorLocation,
                 ignored,
               };
             }

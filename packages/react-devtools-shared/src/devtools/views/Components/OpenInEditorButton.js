@@ -32,7 +32,9 @@ function OpenSymbolicatedSourceInEditorButton({
 
   const {url, shouldDisableButton} = checkConditions(
     editorURL,
-    symbolicatedSource ? symbolicatedSource.location : source,
+    symbolicatedSource
+      ? (symbolicatedSource.editorLocation ?? symbolicatedSource.location)
+      : source,
   );
 
   return (

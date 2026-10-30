@@ -130,6 +130,20 @@ export function getValidFilePath(
     }
   }
 
+  // Absolute paths from source maps are resolved against the source map URL, like browsers do.
+  // So http://localhost:8081/Users/me/app/App.js can be the file /Users/me/app/App.js.
+  try {
+    const url = new URL(maybeRelativePath);
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      const filePath = decodeURIComponent(url.pathname);
+      if (existsSync(filePath)) {
+        return filePath;
+      }
+    }
+  } catch (e) {
+    // Not a URL
+  }
+
   return null;
 }
 

@@ -8,6 +8,7 @@
  */
 
 import type {ReactFunctionLocation, ReactCallSite} from 'shared/ReactTypes';
+import type {SourceMappedLocation} from 'react-devtools-shared/src/symbolicateSource';
 
 import {useCallback, useContext, useSyncExternalStore} from 'react';
 
@@ -21,7 +22,7 @@ import {checkConditions} from './Editor/utils';
 
 const useOpenResource = (
   source: null | ReactFunctionLocation | ReactCallSite,
-  symbolicatedSource: null | ReactFunctionLocation | ReactCallSite,
+  symbolicatedSource: null | SourceMappedLocation,
 ): [
   boolean, // isEnabled
   () => void, // Open Resource
@@ -45,10 +46,19 @@ const useOpenResource = (
     getAlwaysOpenInEditor,
   );
 
+  const symbolicatedLocation =
+    symbolicatedSource === null ? null : symbolicatedSource.location;
+
   // First check if this link is eligible for being open directly in the configured editor.
   const openInEditor =
     alwaysOpenInEditor && source !== null
-      ? checkConditions(editorURL, symbolicatedSource || source)
+      ? checkConditions(
+          editorURL,
+          symbolicatedSource === null
+            ? source
+            : (symbolicatedSource.editorLocation ??
+                symbolicatedSource.location),
+        )
       : null;
   // In some cases (e.g. FB internal usage) the standalone shell might not be able to view the source.
   // To detect this case, we defer to an injected helper function (if present).
@@ -57,7 +67,7 @@ const useOpenResource = (
     (viewElementSourceFunction != null &&
       source != null &&
       (canViewElementSourceFunction == null ||
-        canViewElementSourceFunction(source, symbolicatedSource)));
+        canViewElementSourceFunction(source, symbolicatedLocation)));
 
   const viewSource = useCallback(() => {
     if (openInEditor !== null && !openInEditor.shouldDisableButton) {
@@ -65,9 +75,9 @@ const useOpenResource = (
       // Otherwise, we fallback to open in the local editor if possible (e.g. non-file urls).
       window.open(openInEditor.url);
     } else if (viewElementSourceFunction != null && source != null) {
-      viewElementSourceFunction(source, symbolicatedSource);
+      viewElementSourceFunction(source, symbolicatedLocation);
     }
-  }, [openInEditor, source, symbolicatedSource]);
+  }, [openInEditor, source, symbolicatedLocation]);
 
   return [linkIsEnabled, viewSource];
 };

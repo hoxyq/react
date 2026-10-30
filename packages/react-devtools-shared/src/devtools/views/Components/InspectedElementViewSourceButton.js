@@ -56,7 +56,7 @@ function ActualSourceButton({
 
   const [buttonIsEnabled, viewSource] = useOpenResource(
     source,
-    symbolicatedSource == null ? null : symbolicatedSource.location,
+    symbolicatedSource,
   );
   return (
     <Button
