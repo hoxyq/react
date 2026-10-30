@@ -2296,6 +2296,10 @@ describe('Store', () => {
     );
     MemoizedFakeHigherOrderComponentWithDisplayNameOverride.displayName =
       'memoRefOverride';
+    const MemoizedFakeHigherOrderComponentWithHOCDisplayNameOverride =
+      React.memo(FakeHigherOrderComponent);
+    MemoizedFakeHigherOrderComponentWithHOCDisplayNameOverride.displayName =
+      'withMemo(Baz)';
     const ForwardRefFakeHigherOrderComponentWithDisplayNameOverride =
       React.forwardRef(FakeHigherOrderComponent);
     ForwardRefFakeHigherOrderComponentWithDisplayNameOverride.displayName =
@@ -2313,6 +2317,7 @@ describe('Store', () => {
         <MemoizedFakeHigherOrderComponent />
         <ForwardRefFakeHigherOrderComponent />
         <MemoizedFakeHigherOrderComponentWithDisplayNameOverride />
+        <MemoizedFakeHigherOrderComponentWithHOCDisplayNameOverride />
         <ForwardRefFakeHigherOrderComponentWithDisplayNameOverride />
       </React.Fragment>
     );
@@ -2339,7 +2344,8 @@ describe('Store', () => {
             <Baz> [withFoo][withBar]
             <Baz> [Memo][withFoo][withBar]
             <Baz> [ForwardRef][withFoo][withBar]
-            <memoRefOverride>
+            <memoRefOverride> [Memo]
+            <Baz> [withMemo]
             <forwardRefOverride>
     `);
   });

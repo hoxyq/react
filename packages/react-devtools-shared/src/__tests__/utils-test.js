@@ -11,8 +11,14 @@ import {
   getDisplayName,
   getDisplayNameForReactElement,
   isPlainObject,
+  parseElementDisplayNameFromBackend,
   printOperationsArray,
 } from 'react-devtools-shared/src/utils';
+import {
+  ElementTypeForwardRef,
+  ElementTypeFunction,
+  ElementTypeMemo,
+} from 'react-devtools-shared/src/frontend/types';
 import {TREE_OPERATION_APPLIED_ACTIVITY_SLICE_CHANGE} from 'react-devtools-shared/src/constants';
 import {stackToComponentLocations} from 'react-devtools-shared/src/devtools/utils';
 import {
@@ -81,6 +87,50 @@ describe('utils', () => {
         ['div', null],
         ['App', null],
       ]);
+    });
+  });
+
+  describe('parseElementDisplayNameFromBackend', () => {
+    it('should keep the Memo badge when memo() has a custom displayName', () => {
+      expect(parseElementDisplayNameFromBackend('B', ElementTypeMemo)).toEqual({
+        formattedDisplayName: 'B',
+        hocDisplayNames: ['Memo'],
+        compiledWithForget: false,
+      });
+      expect(
+        parseElementDisplayNameFromBackend('Forget(B)', ElementTypeMemo),
+      ).toEqual({
+        formattedDisplayName: 'B',
+        hocDisplayNames: ['Memo'],
+        compiledWithForget: true,
+      });
+    });
+
+    it('should not add a Memo badge when the displayName is an HOC', () => {
+      expect(
+        parseElementDisplayNameFromBackend('connect(B)', ElementTypeMemo),
+      ).toEqual({
+        formattedDisplayName: 'B',
+        hocDisplayNames: ['connect'],
+        compiledWithForget: false,
+      });
+    });
+
+    it('should not add badges to other element types', () => {
+      expect(
+        parseElementDisplayNameFromBackend('B', ElementTypeFunction),
+      ).toEqual({
+        formattedDisplayName: 'B',
+        hocDisplayNames: null,
+        compiledWithForget: false,
+      });
+      expect(
+        parseElementDisplayNameFromBackend('B', ElementTypeForwardRef),
+      ).toEqual({
+        formattedDisplayName: 'B',
+        hocDisplayNames: null,
+        compiledWithForget: false,
+      });
     });
   });
 

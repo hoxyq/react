@@ -589,6 +589,12 @@ export function parseElementDisplayNameFromBackend(
           displayName = matches.pop();
           hocDisplayNames = matches;
         }
+      } else if (type === ElementTypeMemo) {
+        // A custom displayName on memo() replaces the "Memo(...)" name that the
+        // backend would otherwise report, so the badge has to come from the type.
+        // Names that look like HOCs (e.g. "connect(Foo)") are left alone, since
+        // memo is then an implementation detail of that HOC.
+        hocDisplayNames = ['Memo'];
       }
       break;
     default:
