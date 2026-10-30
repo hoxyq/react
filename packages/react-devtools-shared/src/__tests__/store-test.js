@@ -4157,4 +4157,61 @@ describe('Store', () => {
     styleID = agent.getIDForHostInstance(style).id;
     expect(store.containsElement(styleID)).toBe(true);
   });
+
+  describe('selection in the built-in Elements panel', () => {
+    // Firefox exposes ::before and ::after pseudo-elements selected in its
+    // Inspector as opaque objects that throw if any property is accessed.
+    function createInaccessibleNode() {
+      return new Proxy(
+        {},
+        {
+          get(target, property) {
+            throw new Error(
+              `Permission denied to access property "${String(property)}"`,
+            );
+          },
+        },
+      );
+    }
+
+    // @reactVersion >= 18.0
+    it('should select the element that owns the selected host node', async () => {
+      const ref = React.createRef();
+      function Component() {
+        return <div ref={ref} />;
+      }
+
+      await act(() => render(<Component />));
+      const id = agent.getIDForHostInstance(ref.current).id;
+
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = ref.current;
+      act(() => bridge.send('syncSelectionFromBuiltinElementsPanel'));
+      expect(store.lastSelectedHostInstanceElementId).toBe(id);
+    });
+
+    // @reactVersion >= 18.0
+    it('should clear the selection if the selected host node is inaccessible', async () => {
+      const ref = React.createRef();
+      function Component() {
+        return <div ref={ref} />;
+      }
+
+      await act(() => render(<Component />));
+      const id = agent.getIDForHostInstance(ref.current).id;
+
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = ref.current;
+      act(() => bridge.send('syncSelectionFromBuiltinElementsPanel'));
+      expect(store.lastSelectedHostInstanceElementId).toBe(id);
+
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = createInaccessibleNode();
+      act(() => bridge.send('syncSelectionFromBuiltinElementsPanel'));
+      expect(store.lastSelectedHostInstanceElementId).toBe(null);
+
+      // Updating component filters re-syncs the selection as well.
+      await actAsync(async () => {
+        store.componentFilters = [createDisplayNameFilter('^Foo$')];
+      });
+      expect(store.lastSelectedHostInstanceElementId).toBe(null);
+    });
+  });
 });

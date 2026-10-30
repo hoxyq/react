@@ -262,6 +262,29 @@ function mergeRoots(
   }
 }
 
+// Returns the node selected in the browser's built-in Elements panel ($0),
+// which the extension copies over to the hook, or null if there isn't one.
+function getBuiltinElementsPanelSelection(): HostInstance | null {
+  const target = window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0;
+  if (target == null) {
+    return null;
+  }
+  // In Firefox, ::before and ::after pseudo-elements (and other native
+  // anonymous content) are reflected in a separate scope. When one of them is
+  // selected in the Inspector, $0 is an opaque wrapper that throws a
+  // "Permission denied to access property" error if any of its properties are
+  // accessed. React never owns these nodes, so treat them like a selection
+  // outside of any React root.
+  try {
+    /* eslint-disable ft-flow/no-unused-expressions */
+    target.nodeType;
+    /* eslint-enable ft-flow/no-unused-expressions */
+  } catch (error) {
+    return null;
+  }
+  return target;
+}
+
 export default class Agent extends EventEmitter<{
   hideNativeHighlight: [],
   showNativeHighlight: [HostInstance],
@@ -980,8 +1003,7 @@ export default class Agent extends EventEmitter<{
     };
 
   syncSelectionFromBuiltinElementsPanel: () => void = () => {
-    const target = window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0;
-    this.selectNode(target == null ? null : target);
+    this.selectNode(getBuiltinElementsPanelSelection());
   };
 
   shutdown: () => void = () => {
@@ -1075,8 +1097,8 @@ export default class Agent extends EventEmitter<{
       // to select a closer match for the currently selected host element.
       // The store will already select a suitable parent if the the current
       // selection is now filtered out in which cases this will be a no-op.
-      const target = window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0;
-      if (target != null) {
+      const target = getBuiltinElementsPanelSelection();
+      if (target !== null) {
         this.selectNode(target);
       }
     };
