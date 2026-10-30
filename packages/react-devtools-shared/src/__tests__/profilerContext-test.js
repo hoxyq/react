@@ -651,6 +651,92 @@ describe('ProfilerContext', () => {
     document.body.removeChild(profilerContainer);
   }, 20000);
 
+  it('should not start profiling with the keyboard shortcut when no React app is connected', async () => {
+    const Bridge = require('react-devtools-shared/src/bridge').default;
+    const StoreClass =
+      require('react-devtools-shared/src/devtools/store').default;
+    const Profiler =
+      require('react-devtools-shared/src/devtools/views/Profiler/Profiler').default;
+    const {
+      SettingsContextController,
+    } = require('react-devtools-shared/src/devtools/views/Settings/SettingsContext');
+    const {
+      ModalDialogContextController,
+    } = require('react-devtools-shared/src/devtools/views/ModalDialog');
+    const {
+      prepareProfilingDataExport,
+      prepareProfilingDataFrontendFromExport,
+    } = require('react-devtools-shared/src/devtools/views/Profiler/utils');
+
+    // Record a profile to load it later.
+    const Component = () => null;
+    utils.act(() => render(<Component />));
+    utils.act(() => store.profilerStore.startProfiling());
+    utils.act(() => render(<Component />));
+    utils.act(() => store.profilerStore.stopProfiling());
+    const profilingDataExport = JSON.parse(
+      JSON.stringify(
+        prepareProfilingDataExport((store.profilerStore.profilingData: any)),
+      ),
+    );
+
+    // The Profiler can be shown without a connected backend to load a saved profile.
+    const offlineBridge = new Bridge({
+      listen: () => () => {},
+      send: () => {},
+    });
+    const offlineStore = new StoreClass(offlineBridge, {});
+    utils.act(() => {
+      offlineStore.profilerStore.profilingData =
+        prepareProfilingDataFrontendFromExport(profilingDataExport);
+    });
+    expect(offlineStore.rootSupportsBasicProfiling).toBe(false);
+    expect(offlineStore.profilerStore.didRecordCommits).toBe(true);
+
+    const profilerContainer = document.createElement('div');
+    document.body.appendChild(profilerContainer);
+    const profilerRoot = ReactDOMClient.createRoot(profilerContainer);
+    utils.act(() => {
+      profilerRoot.render(
+        <BridgeContext.Provider value={offlineBridge}>
+          <StoreContext.Provider value={offlineStore}>
+            <TreeContextController>
+              <ProfilerContextController>
+                <SettingsContextController browserTheme="light">
+                  <ModalDialogContextController>
+                    <Profiler />
+                  </ModalDialogContextController>
+                </SettingsContextController>
+              </ProfilerContextController>
+            </TreeContextController>
+          </StoreContext.Provider>
+        </BridgeContext.Provider>,
+      );
+    });
+
+    const ownerWindow = profilerContainer.ownerDocument.defaultView;
+    const isMac =
+      typeof navigator !== 'undefined' &&
+      navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    await utils.actAsync(() => {
+      ownerWindow.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'e',
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        }),
+      );
+    }, false);
+
+    // The loaded profile should not be cleared by a recording that can't happen.
+    expect(offlineStore.profilerStore.isProfilingBasedOnUserInput).toBe(false);
+    expect(offlineStore.profilerStore.didRecordCommits).toBe(true);
+
+    utils.act(() => profilerRoot.unmount());
+    document.body.removeChild(profilerContainer);
+  });
+
   it('should navigate between commits when the keyboard shortcut is pressed', async () => {
     const Parent = () => <Child />;
     const Child = () => null;

@@ -66,7 +66,9 @@ function Profiler(_: {}) {
     if (correctModifier && event.key === 'e') {
       if (isProfiling) {
         stopProfiling();
-      } else {
+      } else if (supportsProfiling) {
+        // Same as the record button, which is disabled when profiling is not supported,
+        // for example when the Profiler is only used to load a saved profile.
         startProfiling();
       }
       event.preventDefault();

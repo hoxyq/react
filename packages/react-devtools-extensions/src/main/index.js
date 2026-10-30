@@ -76,6 +76,12 @@ type DevToolsInstance = {
   isBackendInitialized: boolean,
 };
 
+type OfflineProfilerInstance = {
+  store: Store,
+  render: () => void,
+  root: RootType,
+};
+
 function flushPendingBridgeMessages(): void {
   const currentPort = port;
   if (!isBridgeConnected || currentPort === null) {
@@ -465,6 +471,8 @@ function createProfilerPanel() {
             currentInstance.render('profiler');
 
             logEvent({event_name: 'selected-profiler-tab'});
+          } else if (offlineProfilerInstance === null) {
+            showNoReactDisclaimerInProfilerPanel(profilerPortalContainer);
           }
           portal.injectStyles(cloneStyleTags);
         }
@@ -619,6 +627,7 @@ function performInTabNavigationCleanup() {
 function performFullCleanup() {
   // Potentially, if react hasn't loaded yet and user closed the browser DevTools
   clearReactPollingInstance();
+  unmountOfflineProfiler();
 
   const instance = devToolsInstance;
   if (
@@ -686,6 +695,9 @@ function connectExtensionPort(): void {
 function mountReactDevTools() {
   reactPollingInstance = null;
 
+  // The Profiler could have been opened to inspect a saved profile before React was found
+  unmountOfflineProfiler();
+
   registerEventsLogger();
 
   const instance = createDevToolsInstance();
@@ -707,10 +719,8 @@ function showNoReactDisclaimer() {
     delete componentsPortalContainer._hasInitialHTMLBeenCleared;
   }
 
-  if (profilerPortalContainer) {
-    profilerPortalContainer.innerHTML =
-      '<h1 class="no-react-disclaimer">Looks like this page doesn\'t have React, or it hasn\'t been loaded yet.</h1>';
-    delete profilerPortalContainer._hasInitialHTMLBeenCleared;
+  if (profilerPortalContainer && offlineProfilerInstance === null) {
+    showNoReactDisclaimerInProfilerPanel(profilerPortalContainer);
   }
 
   if (suspensePortalContainer) {
@@ -718,6 +728,81 @@ function showNoReactDisclaimer() {
       '<h1 class="no-react-disclaimer">Looks like this page doesn\'t have React, or it hasn\'t been loaded yet.</h1>';
     delete suspensePortalContainer._hasInitialHTMLBeenCleared;
   }
+}
+
+function showNoReactDisclaimerInProfilerPanel(
+  container: HTMLElement & {_hasInitialHTMLBeenCleared?: boolean},
+) {
+  if (container.querySelector('.no-react-disclaimer-button') !== null) {
+    // Already shown, don't replay the fade in animation
+    return;
+  }
+
+  container.innerHTML =
+    '<div>' +
+    '<h1 class="no-react-disclaimer">Looks like this page doesn\'t have React, or it hasn\'t been loaded yet.</h1>' +
+    '<button class="no-react-disclaimer-button">Open the Profiler to load a saved profile</button>' +
+    '</div>';
+  delete container._hasInitialHTMLBeenCleared;
+
+  container
+    .querySelector('.no-react-disclaimer-button')
+    ?.addEventListener('click', mountOfflineProfiler);
+}
+
+// Saved profiles can be inspected without React on the page,
+// so the Profiler is rendered with a Store that is not connected to any backend.
+// This is the same as openProfiler() in the standalone DevTools.
+function mountOfflineProfiler() {
+  const container = profilerPortalContainer;
+  if (
+    container == null ||
+    devToolsInstance !== null ||
+    offlineProfilerInstance !== null
+  ) {
+    return;
+  }
+
+  const bridge: FrontendBridge = new Bridge({
+    listen: () => () => {},
+    send: () => {},
+  });
+  const store = new Store(bridge, {});
+  subscribeToStoreErrors(store, bridge);
+  // Data recorded on the previously inspected page can still be inspected and saved
+  store.profilerStore.profilingData = profilingData;
+
+  const root = createRoot(document.createElement('div'));
+  const render = () => {
+    root.render(
+      createElement(DevTools, {
+        bridge,
+        browserTheme: getBrowserTheme(),
+        overrideTab: 'profiler',
+        profilerPortalContainer: container,
+        showTabBar: false,
+        store,
+      }),
+    );
+  };
+
+  ensureInitialHTMLIsCleared(container);
+  render();
+
+  offlineProfilerInstance = {store, render, root};
+}
+
+function unmountOfflineProfiler() {
+  const instance = offlineProfilerInstance;
+  if (instance === null) {
+    return;
+  }
+
+  // Keep the loaded profile, so it is still shown once React is found
+  profilingData = instance.store.profilerStore.profilingData;
+  // This should also emit bridge.shutdown
+  flushSync(() => instance.root.unmount());
+  offlineProfilerInstance = null;
 }
 
 function mountReactDevToolsWhenReactHasLoaded() {
@@ -729,6 +814,7 @@ function mountReactDevToolsWhenReactHasLoaded() {
 }
 
 let devToolsInstance: DevToolsInstance | null = null;
+let offlineProfilerInstance: OfflineProfilerInstance | null = null;
 let lastSubscribedBridgeListener: ((message: mixed) => void) | null = null;
 let subscribedBridgePort: ExtensionRuntimePort | null = null;
 let bridgePortListener: ((message: mixed) => void) | null = null;
@@ -815,6 +901,7 @@ mountReactDevToolsWhenReactHasLoaded();
 function onThemeChanged() {
   // Rerender with the new theme
   devToolsInstance?.render();
+  offlineProfilerInstance?.render();
 }
 
 if (chrome.devtools.panels.setThemeChangeHandler) {
