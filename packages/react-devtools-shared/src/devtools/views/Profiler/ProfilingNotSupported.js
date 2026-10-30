@@ -20,13 +20,13 @@ export default function ProfilingNotSupported(): React.Node {
         React v16.5+.
       </p>
       <p className={styles.Paragraph}>
-        Learn more at{' '}
+        Learn more about{' '}
         <a
           className={styles.Link}
-          href="https://fb.me/react-devtools-profiling"
+          href="https://react.dev/reference/dev-tools/react-performance-tracks#using-profiling-builds"
           rel="noopener noreferrer"
           target="_blank">
-          reactjs.org/link/profiling
+          profiling builds
         </a>
         .
       </p>
