@@ -42,6 +42,8 @@ import {ElementTypeActivity} from 'react-devtools-shared/src/frontend/types';
 import {useChangeOwnerAction} from './OwnersListContext';
 import {useChangeActivitySliceAction} from '../SuspenseTab/ActivityList';
 import ActivitySlice from './ActivitySlice';
+import {ModalDialogContext} from '../ModalDialog';
+import ComponentCounts from './ComponentCounts';
 
 // Indent for each node at level N, compared to node at level N - 1.
 const INDENTATION_SIZE = 10;
@@ -451,6 +453,16 @@ export default function Tree(): React.Node {
     clearErrorsAndWarningsAPI({bridge, store});
   };
 
+  const {dispatch: modalDialogDispatch} = useContext(ModalDialogContext);
+  const showComponentCounts = () => {
+    modalDialogDispatch({
+      id: 'ComponentCounts',
+      type: 'SHOW',
+      title: 'Mounted components',
+      content: <ComponentCounts />,
+    });
+  };
+
   const zeroElementsNotice = (
     <div className={styles.ZeroElementsNotice}>
       <p>Loading React Element Tree...</p>
@@ -518,12 +530,13 @@ export default function Tree(): React.Node {
               </Button>
             </React.Fragment>
           )}
-          {!hideSettings && (
-            <Fragment>
-              <div className={styles.VRule} />
-              <SettingsModalContextToggle />
-            </Fragment>
-          )}
+          <div className={styles.VRule} />
+          <Button
+            onClick={showComponentCounts}
+            title="Show how many instances of each component are mounted">
+            <ButtonIcon type="ranked-chart" />
+          </Button>
+          {!hideSettings && <SettingsModalContextToggle />}
         </div>
         {numElements === 0 ? (
           zeroElementsNotice

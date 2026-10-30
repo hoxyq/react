@@ -1242,6 +1242,30 @@ export default class Store extends EventEmitter<{
     return timeline;
   }
 
+  // Returns the number of mounted elements for each display name,
+  // ordered by count (highest first) and then by display name.
+  // Elements hidden by component filters are not in the Store, so they aren't counted.
+  getElementCountsByDisplayName(): Array<{displayName: string, count: number}> {
+    const counts: Map<string, number> = new Map();
+    this._idToElement.forEach(element => {
+      const displayName = element.displayName;
+      if (displayName !== null) {
+        counts.set(displayName, (counts.get(displayName) || 0) + 1);
+      }
+    });
+
+    const target: Array<{displayName: string, count: number}> = [];
+    counts.forEach((count, displayName) => {
+      target.push({displayName, count});
+    });
+    target.sort((a, b) =>
+      a.count !== b.count
+        ? b.count - a.count
+        : a.displayName.localeCompare(b.displayName),
+    );
+    return target;
+  }
+
   getActivities(): Array<{id: Element['id'], depth: number}> {
     const target: Array<{id: Element['id'], depth: number}> = [];
     // TODO: Keep a live tree in the backend so we don't need to recalculate

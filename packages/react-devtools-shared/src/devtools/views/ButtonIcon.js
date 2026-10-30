@@ -30,6 +30,7 @@ export type IconType =
   | 'next'
   | 'parse-hook-names'
   | 'previous'
+  | 'ranked-chart'
   | 'record'
   | 'reload'
   | 'save'
@@ -117,6 +118,9 @@ export default function ButtonIcon({className = '', type}: Props): React.Node {
       break;
     case 'previous':
       pathData = PATH_PREVIOUS;
+      break;
+    case 'ranked-chart':
+      pathData = PATH_RANKED_CHART;
       break;
     case 'record':
       pathData = PATH_RECORD;
@@ -283,6 +287,8 @@ const PATH_PARSE_HOOK_NAMES = (
 
 const PATH_PREVIOUS =
   'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z';
+
+const PATH_RANKED_CHART = 'M3 5h18v3H3zM3 10.5h13v3H3zM3 16h8v3H3z';
 
 const PATH_RECORD = 'M4,12a8,8 0 1,0 16,0a8,8 0 1,0 -16,0';
 

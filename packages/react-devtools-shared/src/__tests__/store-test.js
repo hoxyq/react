@@ -2206,6 +2206,86 @@ describe('Store', () => {
     });
   });
 
+  describe('getElementCountsByDisplayName', () => {
+    // @reactVersion >= 18.0
+    it('should count mounted elements by display name across roots', async () => {
+      const Parent = ({count}) =>
+        new Array(count).fill(true).map((_, index) => <Child key={index} />);
+      const Child = () => <Leaf />;
+      const Leaf = () => null;
+      const MemoLeaf = React.memo(Leaf);
+
+      await act(() => {
+        render(<Parent count={3} />);
+        createContainer();
+        render(
+          <React.Fragment>
+            <Parent count={1} />
+            <MemoLeaf />
+          </React.Fragment>,
+        );
+      });
+
+      expect(store.getElementCountsByDisplayName()).toEqual([
+        {displayName: 'Leaf', count: 5},
+        {displayName: 'Child', count: 4},
+        {displayName: 'Parent', count: 2},
+      ]);
+
+      await act(() => render(<Parent count={1} />));
+
+      expect(store.getElementCountsByDisplayName()).toEqual([
+        {displayName: 'Child', count: 4},
+        {displayName: 'Leaf', count: 4},
+        {displayName: 'Parent', count: 2},
+      ]);
+
+      await act(() => unmount());
+
+      expect(store.getElementCountsByDisplayName()).toEqual([
+        {displayName: 'Child', count: 3},
+        {displayName: 'Leaf', count: 3},
+        {displayName: 'Parent', count: 1},
+      ]);
+    });
+
+    // @reactVersion >= 18.0
+    it('should count elements inside collapsed subtrees', async () => {
+      const Parent = () => [<Child key="a" />, <Child key="b" />];
+      const Child = () => null;
+
+      await act(() => render(<Parent />));
+      store.toggleIsCollapsed(store.getElementIDAtIndex(0), true);
+
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▸ <Parent>
+      `);
+      expect(store.getElementCountsByDisplayName()).toEqual([
+        {displayName: 'Child', count: 2},
+        {displayName: 'Parent', count: 1},
+      ]);
+    });
+
+    // @reactVersion >= 18.0
+    it('should not count elements hidden by component filters', async () => {
+      await actAsync(
+        async () =>
+          (store.componentFilters = [createDisplayNameFilter('^Child$')]),
+      );
+
+      const Parent = () => [<Child key="a" />, <Child key="b" />];
+      const Child = () => <div />;
+
+      await act(() => render(<Parent />));
+
+      expect(store.getElementCountsByDisplayName()).toEqual([
+        {displayName: 'div', count: 2},
+        {displayName: 'Parent', count: 1},
+      ]);
+    });
+  });
+
   // @reactVersion >= 18.0
   // @reactVersion < 19
   // @gate !disableLegacyMode
