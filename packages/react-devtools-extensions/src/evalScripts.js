@@ -50,10 +50,11 @@ export const evalScripts: {[key: EvalScriptIds]: EvalScriptEntry} = {
     fn: () => {
       throw new Error('Not supported in fallback eval context');
     },
-    code: () =>
-      '(window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 !== $0) ?' +
-      '(inspect(window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0), true) :' +
-      'false',
+    // Always call inspect(), even if this node is already the browser's $0.
+    // It is what switches to the Elements panel, so skipping it would make
+    // repeated "inspect the matching DOM element" presses do nothing.
+    // inspect() returns its argument, so return true instead of the DOM node.
+    code: () => '(inspect(window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0), true)',
   },
   setReactSelectionFromBrowser: {
     fn: () => {
