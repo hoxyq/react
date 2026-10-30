@@ -1657,6 +1657,13 @@ export function attach(
   }
 
   function measureInstance(instance: DevToolsInstance): null | Array<Rect> {
+    if (pendingOperationsQueue !== null && !isProfiling) {
+      // No frontend has connected yet. Measuring forces the host to synchronously
+      // recalculate style and layout in the middle of a commit, which can change how
+      // the page behaves. E.g. it can start CSS transitions from intermediate styles.
+      // We'll measure everything once a frontend connects in flushInitialOperations.
+      return null;
+    }
     // Synchronously return the client rects of the Host instances directly inside this Instance.
     const hostInstances = findAllCurrentHostInstances(instance);
     let result: null | Array<Rect> = null;
@@ -2704,6 +2711,40 @@ export function attach(
     }
     suspenseNode.rects = nextRects;
     recordSuspenseResize(suspenseNode);
+  }
+
+  function measureAllSuspenseNodesRecursively(
+    instance: DevToolsInstance,
+  ): void {
+    // Measure every Suspense node in this subtree that is currently showing its content.
+    if (instance.kind !== VIRTUAL_INSTANCE) {
+      const fiber = instance.data;
+      if (isHiddenOffscreen(fiber)) {
+        // We don't measure inside hidden subtrees. This includes the content of
+        // suspended boundaries.
+        return;
+      }
+      const suspenseNode = instance.suspenseNode;
+      const isTimedOut =
+        fiber.tag === SuspenseComponent && fiber.memoizedState !== null;
+      // Fallbacks get attributed to the parent so we only measure if we're
+      // showing primary content.
+      if (suspenseNode !== null && !isTimedOut) {
+        const prevRects = suspenseNode.rects;
+        const nextRects = measureInstance(instance);
+        if (!areEqualRects(prevRects, nextRects)) {
+          suspenseNode.rects = nextRects;
+          recordSuspenseResize(suspenseNode);
+        }
+      }
+    }
+    for (
+      let child = instance.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      measureAllSuspenseNodesRecursively(child);
+    }
   }
 
   function consumeSuspenseNodesOfExistingInstance(
@@ -4976,6 +5017,17 @@ export function attach(
       localPendingOperationsQueue.forEach(operations => {
         hook.emit('operations', operations);
       });
+      // We didn't measure Suspense nodes while no frontend was connected.
+      // While profiling we did, and the Profiler expects one batch of operations per commit.
+      if (!isProfiling) {
+        hook.getFiberRoots(rendererID).forEach(root => {
+          const rootInstance = rootToFiberInstanceMap.get(root);
+          if (rootInstance !== undefined) {
+            measureAllSuspenseNodesRecursively(rootInstance);
+            flushPendingEvents(rootInstance);
+          }
+        });
+      }
     } else {
       // Before the traversals, remember to start tracking
       // our path in case we have selection to restore.
