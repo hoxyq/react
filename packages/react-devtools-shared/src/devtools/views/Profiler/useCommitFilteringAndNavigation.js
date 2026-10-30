@@ -7,7 +7,7 @@
  * @flow
  */
 
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useMemo} from 'react';
 import {useLocalStorage} from '../hooks';
 
 import type {CommitDataFrontend} from './types';
@@ -18,10 +18,6 @@ export type CommitFilteringAndNavigation = {
   minCommitDuration: number,
   setMinCommitDuration: (value: number) => void,
 
-  // Selection state
-  selectedCommitIndex: number | null,
-  selectCommitIndex: (value: number | null) => void,
-
   // Filtered data
   filteredCommitIndices: Array<number>,
   selectedFilteredCommitIndex: number | null,
@@ -31,27 +27,18 @@ export type CommitFilteringAndNavigation = {
   selectPrevCommitIndex: () => void,
 };
 
+// The selected commit index (in the unfiltered list) is owned by the caller,
+// which also resets it when the commit data changes (e.g. when switching roots).
 export function useCommitFilteringAndNavigation(
   commitData: Array<CommitDataFrontend>,
+  selectedCommitIndex: number | null,
+  selectCommitIndex: (value: number | null) => void,
 ): CommitFilteringAndNavigation {
   // Filter settings persisted to localStorage
   const [isCommitFilterEnabled, setIsCommitFilterEnabledValue] =
     useLocalStorage<boolean>('React::DevTools::isCommitFilterEnabled', false);
   const [minCommitDuration, setMinCommitDurationValue] =
     useLocalStorage<number>('minCommitDuration', 0);
-
-  // Currently selected commit index (in the unfiltered list)
-  const [selectedCommitIndex, selectCommitIndex] = useState<number | null>(
-    null,
-  );
-
-  // Reset commit index when commitData changes (e.g., when switching roots).
-  const [previousCommitData, setPreviousCommitData] =
-    useState<Array<CommitDataFrontend>>(commitData);
-  if (previousCommitData !== commitData) {
-    setPreviousCommitData(commitData);
-    selectCommitIndex(commitData.length > 0 ? 0 : null);
-  }
 
   const calculateFilteredIndices = useCallback(
     (enabled: boolean, minDuration: number): Array<number> => {
@@ -197,8 +184,6 @@ export function useCommitFilteringAndNavigation(
     setIsCommitFilterEnabled,
     minCommitDuration,
     setMinCommitDuration,
-    selectedCommitIndex,
-    selectCommitIndex,
     filteredCommitIndices,
     selectedFilteredCommitIndex,
     selectNextCommitIndex,

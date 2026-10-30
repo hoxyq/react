@@ -844,6 +844,138 @@ describe('ProfilerContext', () => {
     expect(context.selectedCommitIndex).toBe(0);
   });
 
+  it('should select the matching fiber when searching within the selected commit', async () => {
+    const Parent = () => (
+      <>
+        <Child />
+        <Child />
+      </>
+    );
+    const Child = () => null;
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+    utils.act(() => root.render(<Parent />));
+
+    const firstChildID = ((store.getElementIDAtIndex(1): any): number);
+    const secondChildID = ((store.getElementIDAtIndex(2): any): number);
+
+    await utils.actAsync(() => store.profilerStore.startProfiling());
+    await utils.actAsync(() => root.render(<Parent />));
+    await utils.actAsync(() => store.profilerStore.stopProfiling());
+
+    let context: Context = ((null: any): Context);
+    function ContextReader() {
+      context = React.useContext(ProfilerContext);
+      return null;
+    }
+
+    await utils.actAsync(() =>
+      TestRenderer.create(
+        <Contexts>
+          <ContextReader />
+        </Contexts>,
+      ),
+    );
+
+    await utils.actAsync(() => context.showSearchInput());
+    await utils.actAsync(() => context.setSearchText('Child'));
+    expect(context.isSearchInputVisible).toBe(true);
+    expect(context.searchResults.map(({id}) => id)).toEqual([
+      firstChildID,
+      secondChildID,
+    ]);
+    expect(context.searchIndex).toBe(0);
+    expect(context.selectedFiberID).toBe(firstChildID);
+    expect(context.selectedFiberName).toBe('Child');
+
+    await utils.actAsync(() => context.goToNextSearchResult());
+    expect(context.searchIndex).toBe(1);
+    expect(context.selectedFiberID).toBe(secondChildID);
+
+    // Navigation wraps around.
+    await utils.actAsync(() => context.goToNextSearchResult());
+    expect(context.searchIndex).toBe(0);
+    expect(context.selectedFiberID).toBe(firstChildID);
+
+    await utils.actAsync(() => context.goToPreviousSearchResult());
+    expect(context.searchIndex).toBe(1);
+    expect(context.selectedFiberID).toBe(secondChildID);
+
+    // A query without matches clears the selection.
+    await utils.actAsync(() => context.setSearchText('Nope'));
+    expect(context.searchResults).toEqual([]);
+    expect(context.selectedFiberID).toBe(null);
+
+    await utils.actAsync(() => context.hideSearchInput());
+    expect(context.isSearchInputVisible).toBe(false);
+    expect(context.searchText).toBe('');
+    expect(context.searchIndex).toBe(-1);
+  });
+
+  it('should reset selections made in the previous profiling data when it is replaced', async () => {
+    const Parent = () => <Child />;
+    const Child = () => null;
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+    utils.act(() => root.render(<Parent />));
+
+    const childID = ((store.getElementIDAtIndex(1): any): number);
+
+    // Record a session with a single commit, to import later.
+    await utils.actAsync(() => store.profilerStore.startProfiling());
+    await utils.actAsync(() => root.render(<Parent />));
+    await utils.actAsync(() => store.profilerStore.stopProfiling());
+    const importedProfilingData = store.profilerStore.profilingData;
+
+    // Record a session with more commits.
+    await utils.actAsync(() => store.profilerStore.startProfiling());
+    await utils.actAsync(() => root.render(<Parent />));
+    await utils.actAsync(() => root.render(<Parent />));
+    await utils.actAsync(() => root.render(<Parent />));
+    await utils.actAsync(() => store.profilerStore.stopProfiling());
+
+    let context: Context = ((null: any): Context);
+    function ContextReader() {
+      context = React.useContext(ProfilerContext);
+      return null;
+    }
+
+    await utils.actAsync(() =>
+      TestRenderer.create(
+        <Contexts>
+          <ContextReader />
+        </Contexts>,
+      ),
+    );
+
+    const rootID = context.rootID;
+    await utils.actAsync(() => context.selectCommitIndex(2));
+    await utils.actAsync(() => context.selectFiber(childID, 'Child'));
+    await utils.actAsync(() => context.showSearchInput());
+    await utils.actAsync(() => context.setSearchText('Child'));
+    expect(context.selectedCommitIndex).toBe(2);
+    expect(context.selectedFiberID).toBe(childID);
+    expect(context.isSearchInputVisible).toBe(true);
+
+    // Replace the data (e.g. by importing a profile).
+    await utils.actAsync(() => {
+      store.profilerStore.profilingData = importedProfilingData;
+    });
+
+    // The root still has data, so it stays selected,
+    // but everything selected within the previous data is reset.
+    expect(context.profilingData).toBe(importedProfilingData);
+    expect(context.rootID).toBe(rootID);
+    expect(context.selectedCommitIndex).toBe(0);
+    expect(context.selectedFiberID).toBe(null);
+    expect(context.selectedFiberName).toBe(null);
+    expect(context.isSearchInputVisible).toBe(false);
+    expect(context.searchText).toBe('');
+    expect(context.searchIndex).toBe(-1);
+  });
+
   it('should handle commit selection edge cases when filtering commits', async () => {
     const Scheduler = require('scheduler');
 
