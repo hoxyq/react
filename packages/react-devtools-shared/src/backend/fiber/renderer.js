@@ -880,6 +880,12 @@ export function attach(
   // The unmount operations are already significantly smaller than mount operations though.
   // This is something to keep in mind for later.
   function updateComponentFilters(componentFilters: Array<ComponentFilter>) {
+    if (!isTrackingTree) {
+      // Nothing is mounted yet. The filters will apply once it is.
+      applyComponentFilters(componentFilters, null);
+      return;
+    }
+
     if (isProfiling) {
       // Re-mounting a tree while profiling is in progress might break a lot of assumptions.
       // If necessary, we could support this- but it doesn't seem like a necessary use case.
@@ -1353,6 +1359,11 @@ export function attach(
   const pendingRealUnmountedIDs: Array<FiberInstance['id']> = [];
   const pendingRealUnmountedSuspenseIDs: Array<FiberInstance['id']> = [];
   const pendingSuspenderChanges: Set<FiberInstance['id']> = new Set();
+  // Until a frontend connects, the operations would have to be queued for it.
+  // Queueing every commit grows without bound, so we don't track the tree until
+  // then and mount the current tree once it connects. Profiling needs every
+  // commit, so starting it also starts tracking.
+  let isTrackingTree: boolean = false;
   let pendingOperationsQueue: Array<OperationsArray> | null = [];
   const pendingStringTable: Map<string, StringTableEntry> = new Map();
   let pendingStringTableLength: number = 0;
@@ -4977,45 +4988,55 @@ export function attach(
         hook.emit('operations', operations);
       });
     } else {
-      // Before the traversals, remember to start tracking
-      // our path in case we have selection to restore.
-      if (trackedPath !== null) {
-        mightBeOnTrackedPath = true;
-      }
-      // If we have not been profiling, then we can just walk the tree and build up its current state as-is.
-      hook.getFiberRoots(rendererID).forEach(root => {
-        const current = root.current;
-        const newRoot = createFiberInstance(current);
-        rootToFiberInstanceMap.set(root, newRoot);
-        idToDevToolsInstanceMap.set(newRoot.id, newRoot);
-        currentRoot = newRoot;
-        setRootPseudoKey(currentRoot.id, root.current);
-
-        // Handle multi-renderer edge-case where only some v16 renderers support profiling.
-        if (isProfiling && rootSupportsProfiling(root)) {
-          // If profiling is active, store commit time and duration.
-          // The frontend may request this information after profiling has stopped.
-          currentCommitProfilingMetadata = {
-            changeDescriptions: recordChangeDescriptions ? new Map() : null,
-            durations: [],
-            commitTime: getCurrentTime() - profilingStartTime,
-            maxActualDuration: 0,
-            priorityLevel: null,
-            updaters: null,
-            effectDuration: null,
-            passiveEffectDuration: null,
-          };
-        }
-
-        mountFiberRecursively(root.current, false);
-
-        flushPendingEvents(currentRoot);
-
-        currentRoot = null as any;
-      });
-
-      needsToFlushComponentLogs = false;
+      mountCurrentRoots();
     }
+  }
+
+  function mountCurrentRoots() {
+    isTrackingTree = true;
+
+    // Before the traversals, remember to start tracking
+    // our path in case we have selection to restore.
+    if (trackedPath !== null) {
+      mightBeOnTrackedPath = true;
+    }
+    // If we have not been profiling, then we can just walk the tree and build up its current state as-is.
+    hook.getFiberRoots(rendererID).forEach(root => {
+      const current = root.current;
+      if (current.child === null) {
+        // Like in handleCommitFiberRoot, we don't mount roots without children.
+        return;
+      }
+      const newRoot = createFiberInstance(current);
+      rootToFiberInstanceMap.set(root, newRoot);
+      idToDevToolsInstanceMap.set(newRoot.id, newRoot);
+      currentRoot = newRoot;
+      setRootPseudoKey(currentRoot.id, root.current);
+
+      // Handle multi-renderer edge-case where only some v16 renderers support profiling.
+      if (isProfiling && rootSupportsProfiling(root)) {
+        // If profiling is active, store commit time and duration.
+        // The frontend may request this information after profiling has stopped.
+        currentCommitProfilingMetadata = {
+          changeDescriptions: recordChangeDescriptions ? new Map() : null,
+          durations: [],
+          commitTime: getCurrentTime() - profilingStartTime,
+          maxActualDuration: 0,
+          priorityLevel: null,
+          updaters: null,
+          effectDuration: null,
+          passiveEffectDuration: null,
+        };
+      }
+
+      mountFiberRecursively(root.current, false);
+
+      flushPendingEvents(currentRoot);
+
+      currentRoot = null as any;
+    });
+
+    needsToFlushComponentLogs = false;
   }
 
   function handleCommitFiberUnmount(fiber: any) {
@@ -5024,6 +5045,10 @@ export function attach(
   }
 
   function handlePostCommitFiberRoot(root: FiberRoot) {
+    if (!isTrackingTree) {
+      return;
+    }
+
     if (isProfiling && rootSupportsProfiling(root)) {
       if (currentCommitProfilingMetadata !== null) {
         const {effectDuration, passiveEffectDuration} =
@@ -5056,6 +5081,11 @@ export function attach(
     root: FiberRoot,
     priorityLevel: void | number,
   ) {
+    if (!isTrackingTree) {
+      // The current tree will be mounted once a frontend connects.
+      return;
+    }
+
     const nextFiber = root.current;
 
     let prevFiber: null | Fiber = null;
@@ -7344,6 +7374,11 @@ export function attach(
   function startProfiling(shouldRecordChangeDescriptions: boolean) {
     if (isProfiling) {
       return;
+    }
+
+    if (!isTrackingTree) {
+      // Queue the current tree so that the profiled commits can be applied to it.
+      mountCurrentRoots();
     }
 
     recordChangeDescriptions = shouldRecordChangeDescriptions;
