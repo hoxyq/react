@@ -54,6 +54,7 @@ import {
   EXTENSION_BRIDGE_CONNECTION_READY,
   getExtensionBridgeConnectionType,
 } from '../constants';
+import {createChunkedMessageListener} from '../messageChunking';
 import './requestAnimationFramePolyfill';
 
 const resolvedParseHookNames = Promise.resolve(parseHookNames);
@@ -127,9 +128,11 @@ function addBridgePortListener(nextPort: ExtensionRuntimePort): void {
 
   removeBridgePortListener();
 
+  // The proxy content script splits messages that are too long into chunks.
+  const chunkedMessageListener = createChunkedMessageListener(bridgeListener);
   const nextBridgePortListener = (message: mixed) => {
     if (port === nextPort) {
-      bridgeListener(message);
+      chunkedMessageListener(message);
     }
   };
   nextPort.onMessage.addListener(nextBridgePortListener);

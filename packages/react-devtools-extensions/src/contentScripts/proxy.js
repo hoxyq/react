@@ -15,6 +15,7 @@ import {
   EXTENSION_BRIDGE_CONNECTION_READY,
   getExtensionBridgeConnectionType,
 } from '../constants';
+import {splitMessageIntoChunks} from '../messageChunking';
 
 function injectProxy() {
   isTransportActive = true;
@@ -104,7 +105,7 @@ function flushPendingMessages(): boolean {
   let sentCount = 0;
   while (sentCount < pendingMessages.length) {
     try {
-      currentPort.postMessage(pendingMessages[sentCount]);
+      postMessageToPort(currentPort, pendingMessages[sentCount]);
       sentCount++;
     } catch (error) {
       isBridgeConnected = false;
@@ -117,6 +118,25 @@ function flushPendingMessages(): boolean {
   }
 
   return isBridgeConnected && pendingMessages.length === 0;
+}
+
+function postMessageToPort(currentPort: ExtensionRuntimePort, message: mixed) {
+  try {
+    currentPort.postMessage(message);
+  } catch (error) {
+    // Chrome throws for messages that are too long to be sent at once,
+    // e.g. the profiling data of a long session in a large app.
+    // Send these in chunks, which the DevTools page joins back together.
+    const chunks = splitMessageIntoChunks(message);
+    if (chunks === null) {
+      // The message is short, so the port must have been disconnected.
+      throw error;
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      currentPort.postMessage(chunks[i]);
+    }
+  }
 }
 
 function sayHelloToBackendManager() {
