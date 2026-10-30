@@ -1144,12 +1144,9 @@ export function attach(
       }
     }
 
-    /* DISABLED: https://github.com/react/react/pull/28417
     if (hideElementsWithPaths.size > 0) {
-      const source = getSourceForFiber(fiber);
-
-      if (source != null) {
-        const {fileName} = source;
+      const fileName = getElementFileNameForFiber(fiber);
+      if (fileName !== null) {
         // eslint-disable-next-line no-for-of-loops/no-for-of-loops
         for (const pathRegExp of hideElementsWithPaths) {
           if (pathRegExp.test(fileName)) {
@@ -1158,9 +1155,42 @@ export function attach(
         }
       }
     }
-    */
 
     return false;
+  }
+
+  // Returns the file name of the code that created the element for this Fiber, i.e. where the
+  // JSX was written. Filtering needs this for every Fiber eagerly, so unlike the source shown
+  // for the inspected element, this is the file name as reported by the engine, without
+  // symbolication. In development, bundlers usually keep the module path in it, e.g.
+  // "/node_modules/.vite/deps/@mui_material.js" or "webpack-internal:///./node_modules/...".
+  function getElementFileNameForFiber(fiber: Fiber): string | null {
+    // React 18 and older attach the location from the JSX source transform.
+    const debugSource = (fiber as any)._debugSource;
+    if (debugSource != null) {
+      return typeof debugSource.fileName === 'string'
+        ? debugSource.fileName
+        : null;
+    }
+
+    const debugStack = fiber._debugStack;
+    if (debugStack == null || typeof debugStack === 'string') {
+      return null;
+    }
+    // The first frame is the JSX runtime, the next one is the callsite of the JSX.
+    const stackTrace = parseStackTrace(debugStack, 1);
+    for (let i = 0; i < stackTrace.length; i++) {
+      const [functionName, fileName] = stackTrace[i];
+      if (functionName === 'UnknownOwner') {
+        // React stops capturing stacks after too many elements were created in a short period
+        // of time, and uses a placeholder stack, which points to React itself.
+        return null;
+      }
+      if (fileName !== '') {
+        return fileName;
+      }
+    }
+    return null;
   }
 
   // NOTICE Keep in sync with shouldFilterFiber() and other get*ForFiber methods

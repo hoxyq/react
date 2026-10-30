@@ -410,9 +410,7 @@ export default function ComponentsSettings({
                       ) as any as ComponentFilterType,
                     )
                   }>
-                  {/* TODO: currently disabled, need find a new way of doing this
-                    <option value={ComponentFilterLocation}>location</option>
-                  */}
+                  <option value={ComponentFilterLocation}>location</option>
                   <option value={ComponentFilterDisplayName}>name</option>
                   <option value={ComponentFilterElementType}>type</option>
                   <option value={ComponentFilterHOC}>hoc</option>

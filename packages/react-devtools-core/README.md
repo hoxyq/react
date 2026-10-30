@@ -44,7 +44,7 @@ Each filter object must include `type` and `isEnabled`. Some filters also requir
 |------|-----------------|-------------|
 | `ComponentFilterElementType` (`1`) | `type`, `isEnabled`, `value: ElementType` | Hides elements of the given element type. DevTools defaults to hiding host components. |
 | `ComponentFilterDisplayName` (`2`) | `type`, `isEnabled`, `isValid`, `value: string` | Hides components whose display name matches the provided RegExp string. |
-| `ComponentFilterLocation` (`3`) | `type`, `isEnabled`, `isValid`, `value: string` | Hides components whose source location matches the provided RegExp string. |
+| `ComponentFilterLocation` (`3`) | `type`, `isEnabled`, `isValid`, `value: string` | Hides elements that were created (e.g. with JSX) in a file whose name matches the provided RegExp string. The file name is the one reported by the JavaScript engine, without source maps. Requires a development build of React. |
 | `ComponentFilterHOC` (`4`) | `type`, `isEnabled`, `isValid` | Hides higher-order components. |
 | `ComponentFilterEnvironmentName` (`5`) | `type`, `isEnabled`, `isValid`, `value: string` | Hides components whose environment name matches the provided string. |
 | `ComponentFilterActivitySlice` (`6`) | `type`, `isEnabled`, `isValid`, `activityID`, `rendererID` | Filters activity slices; usually managed by DevTools rather than user code. |

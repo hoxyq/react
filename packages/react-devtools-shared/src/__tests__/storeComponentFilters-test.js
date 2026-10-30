@@ -410,12 +410,8 @@ describe('Store component filters', () => {
     `);
   });
 
-  // Disabled: filtering by path was removed, source is now determined lazily, including symbolication if applicable
   // @reactVersion >= 16.0
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should filter by path', async () => {
-    // This component should use props object in order to throw for component stack generation
-    // See ReactComponentStackFrame:155 or DevToolsComponentStackFrame:147
+  it('should filter by path', async () => {
     const Component = props => {
       return <div>{props.message}</div>;
     };
@@ -447,6 +443,77 @@ describe('Store component filters', () => {
       [root]
         ▾ <Component>
             <div>
+    `);
+  });
+
+  // @reactVersion >= 19.1
+  it('should filter elements that were created in a matching location', async () => {
+    // Simulates a component library that is loaded from another file, e.g. from node_modules.
+    // eslint-disable-next-line no-new-func
+    const {LibraryButton} = new Function(
+      'React',
+      `
+      function LibraryIcon() {
+        return React.createElement('svg');
+      }
+      function LibraryButton(props) {
+        return React.createElement(
+          'button',
+          null,
+          React.createElement(LibraryIcon),
+          props.children,
+        );
+      }
+      return {LibraryButton};
+      //# sourceURL=http://localhost/node_modules/some-library/index.js
+      `,
+    )(React);
+
+    const Label = () => <span>Click</span>;
+    const App = () => (
+      <LibraryButton>
+        <Label />
+      </LibraryButton>
+    );
+
+    await actAsync(async () => render(<App />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+          ▾ <LibraryButton>
+            ▾ <button>
+              ▾ <LibraryIcon>
+                  <svg>
+              ▾ <Label>
+                  <span>
+    `);
+
+    await actAsync(
+      async () =>
+        (store.componentFilters = [
+          utils.createLocationFilter('node_modules/some-library'),
+        ]),
+    );
+
+    // Elements created by the app stay visible, even when the library renders them.
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+          ▾ <LibraryButton>
+            ▾ <Label>
+                <span>
+    `);
+
+    await actAsync(async () => (store.componentFilters = []));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+          ▾ <LibraryButton>
+            ▾ <button>
+              ▾ <LibraryIcon>
+                  <svg>
+              ▾ <Label>
+                  <span>
     `);
   });
 

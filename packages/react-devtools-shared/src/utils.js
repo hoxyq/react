@@ -48,7 +48,6 @@ import {
 import {
   ComponentFilterActivitySlice,
   ComponentFilterElementType,
-  ComponentFilterLocation,
   ElementTypeHostComponent,
 } from './frontend/types';
 import {
@@ -498,12 +497,6 @@ export function persistableComponentFilters(
 
   return componentFilters.filter(f => {
     return (
-      // Following __debugSource removal from Fiber, the new approach for finding the source location
-      // of a component, represented by the Fiber, is based on lazily generating and parsing component stack frames
-      // To find the original location, React DevTools will perform symbolication, source maps are required for that.
-      // In order to start filtering Fibers, we need to find location for all of them, which can't be done lazily.
-      // Eager symbolication can become quite expensive for large applications.
-      f.type !== ComponentFilterLocation &&
       // Activity slice filters are based on DevTools instance IDs which do not persist across sessions.
       f.type !== ComponentFilterActivitySlice
     );
