@@ -1382,6 +1382,75 @@ export default class Store extends EventEmitter<{
     }
   }
 
+  // Collapses or expands an element along with its entire subtree.
+  // Like toggleIsCollapsed(), expanding an element also expands its parents.
+  toggleIsCollapsedRecursively(id: number, isCollapsed: boolean): void {
+    const element = this.getElementByID(id);
+    if (element === null) {
+      return;
+    }
+
+    if (isCollapsed && element.type === ElementTypeRoot) {
+      this._throwAndEmitError(Error('Root nodes cannot be collapsed'));
+    }
+
+    let didMutate = this._setIsCollapsedRecursively(element, isCollapsed);
+
+    // The weight of the subtree has changed, so the weights of its parents have to be updated too.
+    let parentElement = this._idToElement.get(element.parentID);
+    while (parentElement !== undefined) {
+      if (!isCollapsed && parentElement.isCollapsed) {
+        didMutate = true;
+        parentElement.isCollapsed = false;
+      }
+      this._recalculateElementWeight(parentElement);
+      parentElement = this._idToElement.get(parentElement.parentID);
+    }
+
+    if (didMutate) {
+      this._recalculateWeightAcrossRoots();
+
+      // See the comment in toggleIsCollapsed() for why this is safe.
+      this.emit('mutated', [[], new Map(), null]);
+    }
+  }
+
+  _setIsCollapsedRecursively(element: Element, isCollapsed: boolean): boolean {
+    let didMutate = false;
+
+    // Update children first, because this element's weight depends on theirs.
+    for (let i = 0; i < element.children.length; i++) {
+      const child = this._getElementByIDOrThrow(element.children[i]);
+      if (this._setIsCollapsedRecursively(child, isCollapsed)) {
+        didMutate = true;
+      }
+    }
+
+    // Never collapse roots; it would hide the entire tree.
+    if (
+      element.type !== ElementTypeRoot &&
+      element.isCollapsed !== isCollapsed
+    ) {
+      didMutate = true;
+      element.isCollapsed = isCollapsed;
+    }
+
+    this._recalculateElementWeight(element);
+
+    return didMutate;
+  }
+
+  // An element's weight is the number of rows its subtree would occupy if it was expanded.
+  // Roots aren't rendered as rows, so they only count their children.
+  _recalculateElementWeight(element: Element): void {
+    let weight = element.type === ElementTypeRoot ? 0 : 1;
+    for (let i = 0; i < element.children.length; i++) {
+      const child = this._getElementByIDOrThrow(element.children[i]);
+      weight += child.isCollapsed ? 1 : child.weight;
+    }
+    element.weight = weight;
+  }
+
   _adjustParentTreeWeight: (
     parentElement: ?Element,
     weightDelta: number,

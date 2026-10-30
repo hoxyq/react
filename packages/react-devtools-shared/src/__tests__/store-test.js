@@ -1549,6 +1549,115 @@ describe('Store', () => {
     });
 
     // @reactVersion >= 18.0
+    it('should support collapsing and expanding subtrees recursively', async () => {
+      const Grandparent = () => (
+        <React.Fragment>
+          <Parent />
+          <Parent />
+        </React.Fragment>
+      );
+      const Parent = () => (
+        <React.Fragment>
+          <Child key="0" />
+          <Child key="1" />
+        </React.Fragment>
+      );
+      const Child = () => <Leaf />;
+      const Leaf = () => <div>Hi!</div>;
+
+      await act(() => render(<Grandparent />));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+      `);
+
+      const grandparentID = store.getElementIDAtIndex(0);
+      const parentOneID = store.getElementIDAtIndex(1);
+      const parentTwoID = store.getElementIDAtIndex(6);
+
+      expect(() =>
+        store.toggleIsCollapsedRecursively(store.roots[0], true),
+      ).toThrow('Root nodes cannot be collapsed');
+
+      await act(() => store.toggleIsCollapsedRecursively(grandparentID, true));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▸ <Grandparent>
+      `);
+
+      // Expanding a recursively collapsed element only shows its children.
+      await act(() => store.toggleIsCollapsed(grandparentID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▸ <Parent>
+            ▸ <Parent>
+      `);
+
+      await act(() => store.toggleIsCollapsed(parentOneID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▾ <Parent>
+              ▸ <Child key="0">
+              ▸ <Child key="1">
+            ▸ <Parent>
+      `);
+
+      await act(() => store.toggleIsCollapsedRecursively(parentOneID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+            ▸ <Parent>
+      `);
+
+      // Expanding an element recursively also expands its parents.
+      await act(() => store.toggleIsCollapsedRecursively(grandparentID, true));
+      await act(() => store.toggleIsCollapsedRecursively(parentTwoID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▸ <Parent>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+      `);
+
+      await act(() => store.toggleIsCollapsedRecursively(grandparentID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+            ▾ <Parent>
+              ▾ <Child key="0">
+                  <Leaf>
+              ▾ <Child key="1">
+                  <Leaf>
+      `);
+    });
+
+    // @reactVersion >= 18.0
     it('should support reordering of children', async () => {
       const Root = ({children}) => children;
       const Component = () => null;
@@ -1915,6 +2024,45 @@ describe('Store', () => {
       expect(store).toMatchInlineSnapshot(`
         [root]
           ▸ <Grandparent>
+      `);
+    });
+
+    // @reactVersion >= 18.0
+    it('should support expanding and collapsing subtrees recursively', async () => {
+      const Grandparent = () => (
+        <React.Fragment>
+          <Parent />
+          <Parent />
+        </React.Fragment>
+      );
+      const Parent = () => <Child />;
+      const Child = () => <div>Hi!</div>;
+
+      await act(() => render(<Grandparent />));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▸ <Grandparent>
+      `);
+
+      const grandparentID = store.getElementIDAtIndex(0);
+
+      await act(() => store.toggleIsCollapsedRecursively(grandparentID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▾ <Parent>
+                <Child>
+            ▾ <Parent>
+                <Child>
+      `);
+
+      await act(() => store.toggleIsCollapsedRecursively(grandparentID, true));
+      await act(() => store.toggleIsCollapsed(grandparentID, false));
+      expect(store).toMatchInlineSnapshot(`
+        [root]
+          ▾ <Grandparent>
+            ▸ <Parent>
+            ▸ <Parent>
       `);
     });
 

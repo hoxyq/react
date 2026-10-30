@@ -293,7 +293,12 @@ function ExpandCollapseToggle({element, store}: ExpandCollapseToggleProps) {
     event.preventDefault();
     event.stopPropagation();
 
-    store.toggleIsCollapsed(id, !isCollapsed);
+    // Alt+click toggles the entire subtree, like the browser's Elements panel does.
+    if (event.altKey) {
+      store.toggleIsCollapsedRecursively(id, !isCollapsed);
+    } else {
+      store.toggleIsCollapsed(id, !isCollapsed);
+    }
   };
 
   // $FlowFixMe[missing-local-annot]
