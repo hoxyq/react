@@ -7,7 +7,11 @@
  * @flow
  */
 
-import {getElementDimensions, getNestedBoundingClientRect} from '../utils';
+import {
+  cancelInheritedZoom,
+  getElementDimensions,
+  getNestedBoundingClientRect,
+} from '../utils';
 
 import type {Rect} from '../utils';
 import type Agent from 'react-devtools-shared/src/backend/agent';
@@ -207,6 +211,9 @@ export default class Overlay {
     while (this.rects.length < elements.length) {
       this.rects.push(new OverlayRect(this.window.document, this.container));
     }
+
+    // The page's CSS zoom can change at any time, so check it on every inspect.
+    cancelInheritedZoom(this.container);
 
     const outerBox = {
       top: Number.POSITIVE_INFINITY,

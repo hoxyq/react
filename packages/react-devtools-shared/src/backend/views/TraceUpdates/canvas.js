@@ -13,6 +13,7 @@ import type {HostInstance} from '../../types';
 import type Agent from '../../agent';
 
 import {isReactNativeEnvironment} from 'react-devtools-shared/src/backend/utils';
+import {cancelInheritedZoom} from '../utils';
 
 // Note these colors are in sync with DevTools Profiler chart colors.
 const COLORS = [
@@ -49,6 +50,9 @@ function drawWeb(nodeToData: Map<HostInstance, Data>) {
 
   const dpr = window.devicePixelRatio || 1;
   const canvasFlow: HTMLCanvasElement = canvas as any as HTMLCanvasElement;
+  // Keep the canvas covering the viewport and drawing in the same coordinate
+  // space as the measured rects, even if the page uses CSS zoom.
+  cancelInheritedZoom(canvasFlow);
   canvasFlow.width = window.innerWidth * dpr;
   canvasFlow.height = window.innerHeight * dpr;
   canvasFlow.style.width = `${window.innerWidth}px`;

@@ -112,6 +112,35 @@ export function getNestedBoundingClientRect(
   }
 }
 
+// Get the accumulated CSS zoom of a node: its own `zoom` multiplied by
+// the `zoom` of all of its ancestors.
+//
+// Browsers that implement standardized CSS zoom (Chrome 128+, Firefox 126+,
+// Safari 26.4+) expose it as `currentCSSZoom`. In these browsers
+// getBoundingClientRect() returns zoomed coordinates, while lengths read with
+// getComputedStyle() or set on a zoomed node are unzoomed.
+// Older browsers report unzoomed rects, so treating zoom as 1 keeps their
+// behavior unchanged.
+export function getEffectiveZoom(node: Element): number {
+  const zoom = (node as any).currentCSSZoom;
+  return typeof zoom === 'number' && zoom > 0 ? zoom : 1;
+}
+
+// The highlight nodes that DevTools injects into the page are positioned with
+// coordinates from getBoundingClientRect(), which already include CSS zoom.
+// Cancel out the zoom such a node would inherit from its parent, so that the
+// page doesn't scale these coordinates a second time.
+export function cancelInheritedZoom(node: HTMLElement): void {
+  const parent = node.parentElement;
+  const inheritedZoom = parent != null ? getEffectiveZoom(parent) : 1;
+  node.style.setProperty(
+    'zoom',
+    inheritedZoom === 1 ? '' : String(1 / inheritedZoom),
+  );
+}
+
+// Get the margin, border and padding widths of an element, in the same
+// (zoomed) coordinate space as getBoundingClientRect().
 export function getElementDimensions(domElement: HTMLElement): {
   borderBottom: number,
   borderLeft: number,
@@ -127,19 +156,21 @@ export function getElementDimensions(domElement: HTMLElement): {
   paddingTop: number,
 } {
   const calculatedStyle = window.getComputedStyle(domElement);
+  // getComputedStyle() reports lengths before CSS zoom is applied.
+  const zoom = getEffectiveZoom(domElement);
   return {
-    borderLeft: parseInt(calculatedStyle.borderLeftWidth, 10),
-    borderRight: parseInt(calculatedStyle.borderRightWidth, 10),
-    borderTop: parseInt(calculatedStyle.borderTopWidth, 10),
-    borderBottom: parseInt(calculatedStyle.borderBottomWidth, 10),
-    marginLeft: parseInt(calculatedStyle.marginLeft, 10),
-    marginRight: parseInt(calculatedStyle.marginRight, 10),
-    marginTop: parseInt(calculatedStyle.marginTop, 10),
-    marginBottom: parseInt(calculatedStyle.marginBottom, 10),
-    paddingLeft: parseInt(calculatedStyle.paddingLeft, 10),
-    paddingRight: parseInt(calculatedStyle.paddingRight, 10),
-    paddingTop: parseInt(calculatedStyle.paddingTop, 10),
-    paddingBottom: parseInt(calculatedStyle.paddingBottom, 10),
+    borderLeft: parseInt(calculatedStyle.borderLeftWidth, 10) * zoom,
+    borderRight: parseInt(calculatedStyle.borderRightWidth, 10) * zoom,
+    borderTop: parseInt(calculatedStyle.borderTopWidth, 10) * zoom,
+    borderBottom: parseInt(calculatedStyle.borderBottomWidth, 10) * zoom,
+    marginLeft: parseInt(calculatedStyle.marginLeft, 10) * zoom,
+    marginRight: parseInt(calculatedStyle.marginRight, 10) * zoom,
+    marginTop: parseInt(calculatedStyle.marginTop, 10) * zoom,
+    marginBottom: parseInt(calculatedStyle.marginBottom, 10) * zoom,
+    paddingLeft: parseInt(calculatedStyle.paddingLeft, 10) * zoom,
+    paddingRight: parseInt(calculatedStyle.paddingRight, 10) * zoom,
+    paddingTop: parseInt(calculatedStyle.paddingTop, 10) * zoom,
+    paddingBottom: parseInt(calculatedStyle.paddingBottom, 10) * zoom,
   };
 }
 
