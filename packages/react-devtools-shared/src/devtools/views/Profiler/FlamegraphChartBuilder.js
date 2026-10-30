@@ -62,6 +62,36 @@ export function getChartData({
   let maxDepth = 0;
   let maxSelfDuration = 0;
 
+  // A node's tree base duration should include its children's, but older versions
+  // of React don't always report it that way (e.g. before React 19.2, a Suspense
+  // boundary that just hydrated didn't include its children).
+  // Nodes are sized by this duration, so the children would overflow their parent
+  // and overlap with its siblings. Make each node at least as wide as its children.
+  const idToTreeBaseDurationMap: Map<number, number> = new Map();
+  const getTreeBaseDuration = (id: number): number => {
+    const cachedTreeBaseDuration = idToTreeBaseDurationMap.get(id);
+    if (cachedTreeBaseDuration !== undefined) {
+      return cachedTreeBaseDuration;
+    }
+
+    const node = nodes.get(id);
+    if (node == null) {
+      throw Error(`Could not find node with id "${id}" in commit tree`);
+    }
+
+    let childrenTreeBaseDuration = 0;
+    for (let i = 0; i < node.children.length; i++) {
+      childrenTreeBaseDuration += getTreeBaseDuration(node.children[i]);
+    }
+
+    const treeBaseDuration = Math.max(
+      node.treeBaseDuration,
+      childrenTreeBaseDuration,
+    );
+    idToTreeBaseDurationMap.set(id, treeBaseDuration);
+    return treeBaseDuration;
+  };
+
   // Generate flame graph structure using tree base durations.
   const walkTree = (
     id: number,
@@ -75,14 +105,9 @@ export function getChartData({
       throw Error(`Could not find node with id "${id}" in commit tree`);
     }
 
-    const {
-      children,
-      displayName,
-      hocDisplayNames,
-      key,
-      treeBaseDuration,
-      compiledWithForget,
-    } = node;
+    const {children, displayName, hocDisplayNames, key, compiledWithForget} =
+      node;
+    const treeBaseDuration = getTreeBaseDuration(id);
 
     const actualDuration = fiberActualDurations.get(id) || 0;
     const selfDuration = fiberSelfDurations.get(id) || 0;
@@ -154,11 +179,7 @@ export function getChartData({
     // Component filters or Fragments might lead to multiple "roots" in a flame graph.
     for (let i = root.children.length - 1; i >= 0; i--) {
       const id = root.children[i];
-      const node = nodes.get(id);
-      if (node == null) {
-        throw Error(`Could not find node with id "${id}" in commit tree`);
-      }
-      baseDuration += node.treeBaseDuration;
+      baseDuration += getTreeBaseDuration(id);
       walkTree(id, baseDuration, 1);
     }
 

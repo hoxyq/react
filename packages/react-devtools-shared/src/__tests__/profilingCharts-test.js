@@ -205,6 +205,63 @@ describe('profiling charts', () => {
         ]
       `);
     });
+
+    // @reactVersion >= 18.0
+    it('should fit children within a Suspense boundary that hydrated', () => {
+      const ReactDOMClient = require('react-dom/client');
+      const ReactDOMServer = require('react-dom/server');
+
+      const Child = ({duration}) => {
+        Scheduler.unstable_advanceTime(duration);
+        return <span />;
+      };
+      const App = () => (
+        <div>
+          <Child key="first" duration={1} />
+          <React.Suspense>
+            <Child key="second" duration={2} />
+            <Child key="third" duration={3} />
+          </React.Suspense>
+          <Child key="fourth" duration={4} />
+        </div>
+      );
+
+      const container = document.createElement('div');
+      container.innerHTML = ReactDOMServer.renderToString(<App />);
+
+      utils.act(() => store.profilerStore.startProfiling());
+      utils.act(() => ReactDOMClient.hydrateRoot(container, <App />));
+      utils.act(() => store.profilerStore.stopProfiling());
+
+      const rootID = store.roots[0];
+
+      // The Suspense boundary hydrates in the second commit.
+      // Older versions of React don't include its children in its tree base duration.
+      const {chartData} = getFlamegraphChartData(rootID, 1);
+      expect(
+        chartData.rows.map(row =>
+          row.map(
+            ({label, offset, treeBaseDuration}) =>
+              `${label} [${offset}, ${offset + treeBaseDuration}]`,
+          ),
+        ),
+      ).toMatchInlineSnapshot(`
+        [
+          [
+            "App [0, 10]",
+          ],
+          [
+            "Child key="fourth" [6, 10]",
+            "Suspense (<0.1ms of 5ms) [1, 6]",
+            "Child key="first" [0, 1]",
+          ],
+          [
+            "Child key="third" (3ms of 3ms) [3, 6]",
+            "Child key="second" (2ms of 2ms) [1, 3]",
+          ],
+        ]
+      `);
+    });
   });
 
   describe('ranked chart', () => {
