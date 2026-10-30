@@ -595,6 +595,18 @@ export function dehydrate(
 
       return value;
     }
+    // Objects we can't read from, e.g. the window of a cross-origin iframe.
+    // They can't be sent through the bridge either.
+    case 'unknown':
+      cleaned.push(path);
+      return {
+        inspectable: false,
+        preview_short: formatDataForPreview(data, false),
+        preview_long: formatDataForPreview(data, true),
+        name: null,
+        type,
+      };
+
     case 'infinity':
     case '-infinity':
     case 'nan':

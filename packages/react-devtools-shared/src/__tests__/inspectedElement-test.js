@@ -2169,6 +2169,105 @@ describe('InspectedElement', () => {
     `);
   });
 
+  // Regression test for github.com/react/react/issues/23052
+  it('should support cross-origin objects', async () => {
+    // Mimics the WindowProxy of a cross-origin frame:
+    // reading almost any property throws a SecurityError.
+    const crossOriginWindow = new Proxy(
+      {},
+      {
+        get(target, prop) {
+          // The HTML spec lets these be read as undefined across origins.
+          if (
+            prop === 'then' ||
+            prop === Symbol.toStringTag ||
+            prop === Symbol.hasInstance ||
+            prop === Symbol.isConcatSpreadable
+          ) {
+            return undefined;
+          }
+          throw new DOMException(
+            'Blocked a frame with origin "http://localhost" from accessing a cross-origin frame.',
+            'SecurityError',
+          );
+        },
+        getPrototypeOf() {
+          return null;
+        },
+      },
+    );
+
+    class Frame {
+      contentWindow = crossOriginWindow;
+    }
+
+    const Example = () => null;
+
+    await utils.actAsync(() =>
+      render(
+        <Example
+          frame={new Frame()}
+          nested={{frame: new Frame()}}
+          window={crossOriginWindow}
+          windows={new Set([crossOriginWindow])}
+        />,
+      ),
+    );
+
+    let inspectedElement = null;
+    let inspectElementPath = null;
+
+    // Render once to get a handle on inspectElementPath()
+    inspectedElement = await inspectElementAtIndex(0, () => {
+      inspectElementPath = useInspectElementPath();
+    });
+
+    expect(inspectedElement.props).toMatchInlineSnapshot(`
+      {
+        "frame": {
+          "contentWindow": Dehydrated {
+            "preview_short": unserializable,
+            "preview_long": unserializable,
+          },
+        },
+        "nested": {
+          "frame": Dehydrated {
+            "preview_short": Frame,
+            "preview_long": Frame,
+          },
+        },
+        "window": Dehydrated {
+          "preview_short": unserializable,
+          "preview_long": unserializable,
+        },
+        "windows": {
+          "0": Dehydrated {
+            "preview_short": unserializable,
+            "preview_long": unserializable,
+          },
+        },
+      }
+    `);
+
+    await TestUtilsAct(async () => {
+      await TestRendererAct(async () => {
+        inspectElementPath(['props', 'nested', 'frame']);
+      });
+    });
+    inspectedElement = await inspectElementAtIndex(0);
+
+    expect(inspectedElement.props.nested).toMatchInlineSnapshot(`
+      {
+        "frame": {
+          "contentWindow": Dehydrated {
+            "preview_short": unserializable,
+            "preview_long": unserializable,
+          },
+        },
+      }
+    `);
+  });
+
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // Regression test for github.com/react/react/issues/22099
   // @reactVersion <= 18.2

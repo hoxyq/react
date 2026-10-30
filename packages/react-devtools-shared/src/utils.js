@@ -770,7 +770,16 @@ export function getDataType(data: Object): DataType {
         return 'number';
       }
     case 'object':
-      switch (data.$$typeof) {
+      let $$typeof;
+      try {
+        $$typeof = data.$$typeof;
+      } catch (error) {
+        // Objects from another origin, like the window or location of a
+        // cross-origin iframe, throw a SecurityError when most of their
+        // properties are read, so there is nothing more we can learn about them.
+        return 'unknown';
+      }
+      switch ($$typeof) {
         case REACT_ELEMENT_TYPE:
         case REACT_LEGACY_ELEMENT_TYPE:
           return 'react_element';
