@@ -321,7 +321,144 @@ describe('updaters', () => {
       return promise;
     });
     assertLog(['onCommitRoot']);
-    expect(allSchedulerTypes).toEqual([[null], [Suspender], [Suspender]]);
+    expect(allSchedulerTypes).toEqual([[null], [Suspender], [React.Suspense]]);
+
+    // Verify no outstanding flushes
+    await waitForAll([]);
+  });
+
+  it('should report the Suspense boundary as the scheduler for a retry', async () => {
+    const {
+      FunctionComponent,
+      HostRoot,
+      SuspenseComponent,
+    } = require('react-reconciler/src/ReactWorkTags');
+
+    let resolve = null;
+    const LazyChild = React.lazy(
+      () =>
+        new Promise(r => {
+          resolve = r;
+        }),
+    );
+    const Child = () => null;
+    const Fallback = () => null;
+    let triggerUpdate = null;
+    const Updater = () => {
+      const [count, setCount] = React.useState(0);
+      triggerUpdate = () => setCount(prevCount => prevCount + 1);
+      return count;
+    };
+
+    const root = ReactDOMClient.createRoot(document.createElement('div'));
+    await act(() => {
+      root.render(
+        <>
+          <Updater />
+          <React.Suspense fallback={<Fallback />}>
+            <LazyChild />
+          </React.Suspense>
+        </>,
+      );
+    });
+    // The fallback commits first. The second commit prerenders the suspended
+    // content, which wasn't scheduled by any fiber.
+    assertLog(['onCommitRoot', 'onCommitRoot']);
+    expect(allSchedulerTags).toEqual([[HostRoot], []]);
+    expect(resolve).not.toBeNull();
+
+    allSchedulerTags.length = 0;
+    allSchedulerTypes.length = 0;
+    await act(() => {
+      resolve({default: Child});
+    });
+    assertLog(['onCommitRoot']);
+    expect(allSchedulerTags).toEqual([[SuspenseComponent]]);
+    expect(allSchedulerTypes).toEqual([[React.Suspense]]);
+
+    // The updaters of the render that suspended shouldn't leak into an
+    // unrelated update in the same lane.
+    allSchedulerTags.length = 0;
+    allSchedulerTypes.length = 0;
+    await act(() => {
+      triggerUpdate();
+    });
+    assertLog(['onCommitRoot']);
+    expect(allSchedulerTags).toEqual([[FunctionComponent]]);
+    expect(allSchedulerTypes).toEqual([[Updater]]);
+
+    // Verify no outstanding flushes
+    await waitForAll([]);
+  });
+
+  it('should report the original updater when a suspended transition is pinged', async () => {
+    let resolve = null;
+    let promise = null;
+    let data = null;
+    const readData = () => {
+      if (data !== null) {
+        return data;
+      }
+      if (promise === null) {
+        promise = new Promise(r => {
+          resolve = value => {
+            data = value;
+            r(value);
+          };
+        });
+      }
+      throw promise;
+    };
+    let startUpdate = null;
+    const Updater = () => {
+      const [shouldSuspend, setShouldSuspend] = React.useState(false);
+      startUpdate = () => {
+        React.startTransition(() => {
+          setShouldSuspend(true);
+        });
+      };
+      return shouldSuspend ? readData() : null;
+    };
+    let triggerOtherUpdate = null;
+    const Other = () => {
+      const [count, setCount] = React.useState(0);
+      triggerOtherUpdate = () => setCount(prevCount => prevCount + 1);
+      return count;
+    };
+
+    const root = ReactDOMClient.createRoot(document.createElement('div'));
+    await act(() => {
+      root.render(
+        <>
+          <Other />
+          <React.Suspense fallback={null}>
+            <Updater />
+          </React.Suspense>
+        </>,
+      );
+    });
+    assertLog(['onCommitRoot']);
+    expect(allSchedulerTypes).toEqual([[null]]);
+
+    // The transition suspends without committing a fallback.
+    await act(() => {
+      startUpdate();
+    });
+    assertLog([]);
+    expect(resolve).not.toBeNull();
+
+    // An unrelated update commits while the transition is still suspended.
+    await act(() => {
+      triggerOtherUpdate();
+    });
+    assertLog(['onCommitRoot']);
+    expect(allSchedulerTypes).toEqual([[null], [Other]]);
+
+    await act(() => {
+      resolve('done');
+    });
+    assertLog(['onCommitRoot']);
+    expect(allSchedulerTypes).toEqual([[null], [Other], [Updater]]);
 
     // Verify no outstanding flushes
     await waitForAll([]);

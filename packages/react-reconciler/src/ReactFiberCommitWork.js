@@ -51,7 +51,6 @@ import {
   enableProfilerCommitHooks,
   enableSuspenseCallback,
   enableScopeAPI,
-  enableUpdaterTracking,
   enableTransitionTracing,
   enableLegacyHidden,
   disableLegacyMode,
@@ -185,7 +184,6 @@ import {
   captureCommitPhaseError,
   resolveRetryWakeable,
   markCommitTimeOfFallback,
-  restorePendingUpdaters,
   addTransitionStartCallbackToPendingTransition,
   addTransitionProgressCallbackToPendingTransition,
   addTransitionCompleteCallbackToPendingTransition,
@@ -202,7 +200,7 @@ import {
   Passive as HookPassive,
 } from './ReactHookEffectTags';
 import {doesFiberContain} from './ReactFiberTreeReflection';
-import {isDevToolsPresent, onCommitUnmount} from './ReactFiberDevToolsHook';
+import {onCommitUnmount} from './ReactFiberDevToolsHook';
 import {releaseCache, retainCache} from './ReactFiberCacheComponent';
 import {clearTransitionsForLanes} from './ReactFiberLane';
 import {
@@ -308,10 +306,6 @@ let needsFormReset = false;
 const PossiblyWeakSet = typeof WeakSet === 'function' ? WeakSet : Set;
 
 let nextEffect: Fiber | null = null;
-
-// Used for Profiling builds to track updaters.
-let inProgressLanes: Lanes | null = null;
-let inProgressRoot: FiberRoot | null = null;
 
 let focusedInstanceHandle: null | Fiber = null;
 export let shouldFireAfterActiveInstanceBlur: boolean = false;
@@ -1942,19 +1936,6 @@ function attachSuspenseRetryListeners(
     if (!retryCache.has(wakeable)) {
       retryCache.add(wakeable);
 
-      if (enableUpdaterTracking) {
-        if (isDevToolsPresent) {
-          if (inProgressLanes !== null && inProgressRoot !== null) {
-            // If we have pending work still, associate the original updaters with it.
-            restorePendingUpdaters(inProgressRoot, inProgressLanes);
-          } else {
-            throw Error(
-              'Expected finished root and lanes to be set. This is a bug in React.',
-            );
-          }
-        }
-      }
-
       const retry = resolveRetryWakeable.bind(null, finishedWork, wakeable);
       wakeable.then(retry, retry);
     }
@@ -1983,18 +1964,12 @@ export function commitMutationEffects(
   finishedWork: Fiber,
   committedLanes: Lanes,
 ) {
-  inProgressLanes = committedLanes;
-  inProgressRoot = root;
-
   rootViewTransitionAffected = false;
   inUpdateViewTransition = false;
 
   resetComponentEffectTimers();
 
   commitMutationEffectsOnFiber(finishedWork, root, committedLanes);
-
-  inProgressLanes = null;
-  inProgressRoot = null;
 }
 
 function recursivelyTraverseMutationEffects(
@@ -3002,16 +2977,10 @@ export function commitLayoutEffects(
   root: FiberRoot,
   committedLanes: Lanes,
 ): void {
-  inProgressLanes = committedLanes;
-  inProgressRoot = root;
-
   resetComponentEffectTimers();
 
   const current = finishedWork.alternate;
   commitLayoutEffectOnFiber(root, current, finishedWork, committedLanes);
-
-  inProgressLanes = null;
-  inProgressRoot = null;
 }
 
 function recursivelyTraverseLayoutEffects(

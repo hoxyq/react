@@ -945,6 +945,14 @@ export function markRootFinished(
       }
     }
 
+    if (enableUpdaterTracking) {
+      if (isDevToolsPresent) {
+        // A render that suspends restores its updaters to its lanes in case it
+        // doesn't commit. If it did commit, those updaters are stale.
+        root.pendingUpdatersLaneMap[index].clear();
+      }
+    }
+
     lanes &= ~lane;
   }
 

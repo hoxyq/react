@@ -5156,6 +5156,12 @@ function retryTimedOutBoundary(boundaryFiber: Fiber, retryLane: Lane) {
   const root = enqueueConcurrentRenderForLane(boundaryFiber, retryLane);
   if (root !== null) {
     markRootUpdated(root, retryLane);
+    if (enableUpdaterTracking) {
+      if (isDevToolsPresent) {
+        // The boundary schedules the retry, so it's the updater of this work.
+        addFiberToLanesMap(root, boundaryFiber, retryLane);
+      }
+    }
     ensureRootIsScheduled(root);
   }
 }
