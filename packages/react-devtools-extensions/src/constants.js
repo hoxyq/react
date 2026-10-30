@@ -16,6 +16,10 @@ export const EXTENSION_BRIDGE_CONNECTION_READY: ExtensionBridgeConnectionType =
 export const EXTENSION_BRIDGE_CONNECTION_DISCONNECTED: ExtensionBridgeConnectionType =
   'react-devtools-extension-bridge-connection-disconnected';
 
+// A panel page opened with this URL search param renders DevTools itself,
+// instead of the devtools page rendering into it. Only used by Firefox, for private windows.
+export const PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM = 'hostDevTools';
+
 export function getExtensionBridgeConnectionType(
   message: mixed,
 ): ExtensionBridgeConnectionType | null {

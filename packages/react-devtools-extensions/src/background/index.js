@@ -247,11 +247,11 @@ function connectExtensionAndProxyPorts(
   sendBridgeConnectionMessage(proxyPort, EXTENSION_BRIDGE_CONNECTION_READY);
 }
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message?.source) {
     case 'devtools-page': {
-      handleDevToolsPageMessage(message);
-      break;
+      // Returns true if it will respond asynchronously.
+      return handleDevToolsPageMessage(message, sendResponse);
     }
     case 'react-devtools-fetch-resource-content-script': {
       handleFetchResourceContentScriptMessage(message);

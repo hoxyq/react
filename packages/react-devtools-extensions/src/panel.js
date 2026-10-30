@@ -1,3 +1,5 @@
+import {PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM} from './constants';
+
 // Portal target container.
 window.container = document.getElementById('container');
 
@@ -17,3 +19,15 @@ window.injectStyles = getLinkTags => {
     }
   }
 };
+
+// The devtools page can't render into this panel, so the panel loads DevTools itself.
+// See createPanelHostingDevTools() in main/index.js.
+if (
+  new URLSearchParams(window.location.search).has(
+    PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM,
+  )
+) {
+  const script = document.createElement('script');
+  script.src = './build/main.js';
+  document.body.appendChild(script);
+}

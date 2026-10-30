@@ -52,6 +52,7 @@ import debounce from './debounce';
 import {
   EXTENSION_BRIDGE_CONNECTION_DISCONNECTED,
   EXTENSION_BRIDGE_CONNECTION_READY,
+  PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM,
   getExtensionBridgeConnectionType,
 } from '../constants';
 import './requestAnimationFramePolyfill';
@@ -308,7 +309,9 @@ function createDevToolsInstance(): DevToolsInstance {
     );
   };
 
-  const root = createRoot(document.createElement('div'));
+  const root = createRoot(
+    hostingPanelContainer ?? document.createElement('div'),
+  );
 
   const render = (overrideTab: TabID | null = mostRecentOverrideTab) => {
     mostRecentOverrideTab = overrideTab;
@@ -326,7 +329,7 @@ function createDevToolsInstance(): DevToolsInstance {
         fetchFileWithCaching,
         hookNamesModuleLoaderFunction,
         overrideTab,
-        showTabBar: false,
+        showTabBar: hostingPanelContainer !== null,
         store,
         suspensePortalContainer,
         warnIfUnsupportedVersionDetected: true,
@@ -547,7 +550,24 @@ function createDevToolsPanels(): void {
   createSuspensePanel();
 }
 
+// Firefox loads the devtools page in a hidden window that is never private,
+// but it loads the panels in the toolbox of the inspected tab. For a tab in a private window,
+// the panels are private too, so Firefox treats them as cross-origin to the devtools page,
+// which then can't access their documents to render DevTools into them.
+// Instead, create a single panel that loads this script and renders DevTools with a tab bar by itself.
+function createPanelHostingDevTools(): void {
+  chrome.devtools.panels.create(
+    'Components',
+    '',
+    `panel.html?${PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM}`,
+  );
+}
+
 function renderOpenedDevToolsPanels(instance: DevToolsInstance): void {
+  if (hostingPanelContainer) {
+    instance.render();
+  }
+
   if (componentsPortalContainer) {
     ensureInitialHTMLIsCleared(componentsPortalContainer);
     instance.render('components');
@@ -588,7 +608,8 @@ function performInTabNavigationCleanup() {
   // If panels were already created, and we have already mounted React root to display
   // tabs (Components or Profiler), we should unmount root first and render them again
   if (
-    (componentsPortalContainer ||
+    (hostingPanelContainer ||
+      componentsPortalContainer ||
       profilerPortalContainer ||
       suspensePortalContainer) &&
     instance !== null
@@ -622,7 +643,8 @@ function performFullCleanup() {
 
   const instance = devToolsInstance;
   if (
-    (componentsPortalContainer ||
+    (hostingPanelContainer ||
+      componentsPortalContainer ||
       profilerPortalContainer ||
       suspensePortalContainer) &&
     instance !== null
@@ -701,6 +723,11 @@ function clearReactPollingInstance() {
 }
 
 function showNoReactDisclaimer() {
+  if (hostingPanelContainer) {
+    hostingPanelContainer.innerHTML =
+      '<h1 class="no-react-disclaimer">Looks like this page doesn\'t have React, or it hasn\'t been loaded yet.</h1>';
+  }
+
   if (componentsPortalContainer) {
     componentsPortalContainer.innerHTML =
       '<h1 class="no-react-disclaimer">Looks like this page doesn\'t have React, or it hasn\'t been loaded yet.</h1>';
@@ -745,6 +772,14 @@ let profilerPortalContainer = null;
 let suspensePortalContainer = null;
 let editorPortalContainer = null;
 let inspectedElementPortalContainer = null;
+
+// Set when this script runs in the panel created by createPanelHostingDevTools(),
+// instead of the devtools page.
+const hostingPanelContainer: HTMLElement | null = new URLSearchParams(
+  window.location.search,
+).has(PANEL_HOSTS_DEVTOOLS_SEARCH_PARAM)
+  ? document.getElementById('container')
+  : null;
 
 let mostRecentOverrideTab: null | TabID = null;
 
@@ -795,8 +830,18 @@ function onNavigated() {
   );
 }
 
-// Cleanup previous page state and remount everything, if the inspected document was replaced
-chrome.devtools.network.onNavigated.addListener(onNavigated);
+function startDevTools() {
+  // Cleanup previous page state and remount everything, if the inspected document was replaced
+  chrome.devtools.network.onNavigated.addListener(onNavigated);
+
+  connectExtensionPort();
+
+  if (hostingPanelContainer === null) {
+    createDevToolsPanels();
+  }
+
+  mountReactDevToolsWhenReactHasLoaded();
+}
 
 // Should be emitted when browser DevTools are closed
 if (__IS_FIREFOX__) {
@@ -806,11 +851,29 @@ if (__IS_FIREFOX__) {
   window.addEventListener('beforeunload', performFullCleanup);
 }
 
-connectExtensionPort();
-
-createDevToolsPanels();
-
-mountReactDevToolsWhenReactHasLoaded();
+if (__IS_FIREFOX__ && hostingPanelContainer === null) {
+  // The devtools page can't render into panels of private windows, see createPanelHostingDevTools().
+  chrome.runtime
+    .sendMessage({
+      source: 'devtools-page',
+      payload: {
+        type: 'check-if-tab-is-private',
+        tabId: chrome.devtools.inspectedWindow.tabId,
+      },
+    })
+    .then(
+      isTabPrivate => {
+        if (isTabPrivate === true) {
+          createPanelHostingDevTools();
+        } else {
+          startDevTools();
+        }
+      },
+      () => startDevTools(),
+    );
+} else {
+  startDevTools();
+}
 
 function onThemeChanged() {
   // Rerender with the new theme

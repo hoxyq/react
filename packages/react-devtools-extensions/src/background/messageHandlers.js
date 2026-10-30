@@ -38,10 +38,24 @@ export function handleBackendManagerMessage(message, sender) {
   }
 }
 
-export function handleDevToolsPageMessage(message) {
+export function handleDevToolsPageMessage(message, sendResponse) {
   const {payload} = message;
 
   switch (payload?.type) {
+    case 'check-if-tab-is-private': {
+      const {
+        payload: {tabId},
+      } = message;
+
+      chrome.tabs.get(tabId).then(
+        tab => sendResponse(tab.incognito),
+        () => sendResponse(false),
+      );
+
+      // Keep the message channel open until sendResponse is called.
+      return true;
+    }
+
     // Proxy this message from DevTools page to content script via chrome.tabs.sendMessage
     case 'fetch-file-with-cache': {
       const {
