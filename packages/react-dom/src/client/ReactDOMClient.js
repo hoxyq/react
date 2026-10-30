@@ -51,10 +51,21 @@ Internals.findDOMNode = findDOMNode;
 
 export {ReactVersion as version, createRoot, hydrateRoot};
 
+// Setting this global to `true` before React DOM loads opts out of the
+// "Download the React DevTools" message, e.g. in environments where the
+// extension can't be installed.
+declare const __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__: mixed;
+
 const foundDevTools = injectIntoDevTools();
 
 if (__DEV__) {
-  if (!foundDevTools && canUseDOM && window.top === window.self) {
+  if (
+    !foundDevTools &&
+    canUseDOM &&
+    window.top === window.self &&
+    (typeof __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ === 'undefined' ||
+      __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ !== true)
+  ) {
     // If we're in Chrome or Firefox, provide a download link if not installed.
     if (
       (navigator.userAgent.indexOf('Chrome') > -1 &&

@@ -41,6 +41,7 @@ module.exports = {
     // Vendor specific
     MSApp: 'readonly',
     __REACT_DEVTOOLS_GLOBAL_HOOK__: 'readonly',
+    __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__: 'readonly',
     // FB
     __DEV__: 'readonly',
     // Node.js Server Rendering

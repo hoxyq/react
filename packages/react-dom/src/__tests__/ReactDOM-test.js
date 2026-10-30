@@ -459,6 +459,54 @@ describe('ReactDOM', () => {
     }
   });
 
+  describe('DevTools download message', () => {
+    let userAgentSpy;
+    let infoSpy;
+
+    beforeEach(() => {
+      // The message is only logged in Chrome and Firefox.
+      userAgentSpy = jest
+        .spyOn(navigator, 'userAgent', 'get')
+        .mockReturnValue(
+          'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+            'Chrome/140.0.0.0 Safari/537.36',
+        );
+      infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+      jest.resetModules();
+    });
+
+    afterEach(() => {
+      userAgentSpy.mockRestore();
+      infoSpy.mockRestore();
+      delete global.__REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__;
+    });
+
+    function getDownloadMessageCalls() {
+      return infoSpy.mock.calls.filter(
+        ([format]) =>
+          typeof format === 'string' &&
+          format.includes('Download the React DevTools'),
+      );
+    }
+
+    it('is logged when DevTools is not installed', () => {
+      require('react-dom/client');
+      expect(getDownloadMessageCalls()).toHaveLength(__DEV__ ? 1 : 0);
+    });
+
+    it('is not logged when __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ is true', () => {
+      global.__REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ = true;
+      require('react-dom/client');
+      expect(getDownloadMessageCalls()).toHaveLength(0);
+    });
+
+    it('is logged when __REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ is not true', () => {
+      global.__REACT_DEVTOOLS_SUPPRESS_DOWNLOAD_MESSAGE__ = false;
+      require('react-dom/client');
+      expect(getDownloadMessageCalls()).toHaveLength(__DEV__ ? 1 : 0);
+    });
+  });
+
   it('should not crash calling findDOMNode inside a function component', async () => {
     class Component extends React.Component {
       render() {
