@@ -114,9 +114,14 @@ export default function SearchInput({
       input.focus();
     }
 
+    const isMac =
+      typeof navigator !== 'undefined' &&
+      navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      const {key, metaKey} = event;
-      if (key === 'f' && metaKey) {
+      // Cmd+F (Mac) or Ctrl+F (Windows/Linux) to focus the search input.
+      const correctModifier = isMac ? event.metaKey : event.ctrlKey;
+      if (event.key === 'f' && correctModifier) {
         input.focus();
         event.preventDefault();
         event.stopPropagation();
