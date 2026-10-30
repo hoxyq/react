@@ -146,6 +146,13 @@ module.exports = {
       filename: '[file].map',
       include: ['installHook.js', 'react_devtools_backend_compact.js'],
       noSources: !__DEV__,
+      // Both scripts are executed in the page's main world. Firefox reports them
+      // as `<anonymous code>` instead of their moz-extension:// URL, so a relative
+      // sourceMappingURL is resolved against the inspected page's URL, and Firefox
+      // requests /installHook.js.map from the app's own server. The extension URL
+      // includes a random per-install UUID, so it can't be made absolute at build
+      // time either. Firefox can't load these source maps, so don't link them.
+      append: IS_FIREFOX ? false : undefined,
       // https://github.com/webpack/webpack/issues/3603#issuecomment-1743147144
       moduleFilenameTemplate(info) {
         const {absoluteResourcePath, namespace, resourcePath} = info;
