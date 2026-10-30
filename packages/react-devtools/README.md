@@ -83,7 +83,27 @@ Add `<script src="http://localhost:8097"></script>` as the very first `<script>`
 
 This will ensure the developer tools are connected. **Don’t forget to remove it before deploying to production!**
 
->If you install `react-devtools` as a project dependency, you may also replace the `<script>` suggested above with a JavaScript import (`import 'react-devtools'`). It is important that this import comes before any other imports in your app (especially before `react-dom`). Make sure to remove the import before deploying to production, as it carries a large DevTools client with it. If you use Webpack and have control over its configuration, you could alternatively add `'react-devtools'` as the first item in the `entry` array of the development-only configuration, and then you wouldn’t need to deal either with `<script>` tags or `import` statements.
+### Connecting from your bundle
+
+The `react-devtools` package only contains the standalone app, so it can't be imported into your app. If you can't add the `<script>` tag above (for example, because the page's Content Security Policy doesn't allow loading scripts from `localhost`), you can connect to the standalone app from your own code with [`react-devtools-core`](https://github.com/react/react/tree/main/packages/react-devtools-core) instead. Install the same version as `react-devtools`:
+
+```sh
+npm install --save-dev react-devtools-core
+```
+
+Then put the connection code in a module of its own (imports are evaluated before the rest of a file, so calling these functions from your entry file would be too late):
+
+```js
+// connectToReactDevTools.js
+import {initialize, connectToDevTools} from 'react-devtools-core';
+
+initialize();
+connectToDevTools();
+```
+
+This module has to run before React does, so import it before any other import in your app's entry file, or add it as the first item of the `entry` array in your development-only Webpack configuration. **Like the `<script>` tag, it must not be included in production builds.**
+
+If your app uses React Refresh (Fast Refresh), this module also has to run before the React Refresh runtime. Otherwise the runtime sets up its own minimal `__REACT_DEVTOOLS_GLOBAL_HOOK__` first, and DevTools fails with `TypeError: hook.sub is not a function`. Some setups, such as `@pmmmwh/react-refresh-webpack-plugin`, run the React Refresh runtime before all of your entries; use the `<script>` tag in that case.
 
 ## Advanced
 
