@@ -168,6 +168,22 @@ export default class Overlay {
     this.container = doc.createElement('div');
     this.container.style.zIndex = '10000000';
 
+    // A z-index can't stack the overlay above top layer elements,
+    // like a modal <dialog>, so render the overlay in the top layer too.
+    // $FlowFixMe[method-unbinding]
+    if (typeof this.container.showPopover === 'function') {
+      this.container.setAttribute('popover', 'manual');
+      // Undo the default popover styles, so the container itself stays invisible.
+      assign(this.container.style, {
+        background: 'transparent',
+        border: 'none',
+        margin: '0',
+        overflow: 'visible',
+        padding: '0',
+        pointerEvents: 'none',
+      });
+    }
+
     this.tip = new OverlayTip(doc, this.container);
     this.rects = [];
 
@@ -187,6 +203,21 @@ export default class Overlay {
     }
   }
 
+  showInTopLayer() {
+    const container = this.container;
+    // $FlowFixMe[method-unbinding]
+    if (typeof container.showPopover !== 'function') {
+      return;
+    }
+    // Top layer elements are stacked in the order they were shown, so show the
+    // container again to keep it above the ones shown after it, like a modal
+    // <dialog> that was opened while the overlay was visible.
+    if (container.matches(':popover-open')) {
+      container.hidePopover();
+    }
+    container.showPopover();
+  }
+
   inspect(nodes: $ReadOnlyArray<HTMLElement | Text>, name?: ?string) {
     // We can't get the size of text nodes or comment nodes. React as of v15
     // heavily uses comment nodes to delimit text.
@@ -203,6 +234,8 @@ export default class Overlay {
     if (elements.length === 0) {
       return;
     }
+
+    this.showInTopLayer();
 
     while (this.rects.length < elements.length) {
       this.rects.push(new OverlayRect(this.window.document, this.container));
