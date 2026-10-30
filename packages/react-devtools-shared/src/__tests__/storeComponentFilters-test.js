@@ -410,6 +410,205 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.0
+  it('should filter a subtree by display name', async () => {
+    const Text = ({label}) => label;
+    const DayPicker = ({days}) => (
+      <div>
+        {days.map(day => (
+          <Text key={day} label={day} />
+        ))}
+      </div>
+    );
+    const Period = ({days, children}) => (
+      <section>
+        <DayPicker days={days} />
+        {children}
+      </section>
+    );
+    const Profile = ({days}) => (
+      <React.Fragment>
+        <Period days={days}>
+          <Text label="passed in" />
+        </Period>
+        <Text label="sibling" />
+      </React.Fragment>
+    );
+
+    await actAsync(async () => render(<Profile days={['mon']} />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+          ▾ <Period>
+            ▾ <section>
+              ▾ <DayPicker>
+                ▾ <div>
+                    <Text key="mon">
+                <Text>
+            <Text>
+    `);
+
+    // A display name filter only hides the matching element itself.
+    await actAsync(
+      async () =>
+        (store.componentFilters = [utils.createDisplayNameFilter('^Period$')]),
+    );
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+          ▾ <section>
+            ▾ <DayPicker>
+              ▾ <div>
+                  <Text key="mon">
+              <Text>
+            <Text>
+    `);
+
+    // A subtree filter hides the matching element and everything inside of it.
+    await actAsync(
+      async () =>
+        (store.componentFilters = [
+          utils.createDisplayNameSubtreeFilter('^Period$'),
+        ]),
+    );
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+            <Text>
+    `);
+
+    // Things that mount inside of the hidden subtree later stay hidden.
+    await actAsync(async () => render(<Profile days={['mon', 'tue']} />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+            <Text>
+    `);
+
+    await actAsync(async () => (store.componentFilters = []));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+          ▾ <Period>
+            ▾ <section>
+              ▾ <DayPicker>
+                ▾ <div>
+                    <Text key="mon">
+                    <Text key="tue">
+                <Text>
+            <Text>
+    `);
+  });
+
+  // @reactVersion >= 18.0
+  it('should resolve and release host instances inside of a hidden subtree', async () => {
+    const dayRef = React.createRef();
+    const suspendedDayRef = React.createRef();
+
+    const DayPicker = ({dayRef: ref}) => <div ref={ref}>day</div>;
+    const Period = () => (
+      <section>
+        <DayPicker dayRef={dayRef} />
+        <React.Suspense fallback={null}>
+          <DayPicker dayRef={suspendedDayRef} />
+        </React.Suspense>
+      </section>
+    );
+    const Profile = ({showPeriod}) => (showPeriod ? <Period /> : <span />);
+
+    store.componentFilters = [utils.createDisplayNameSubtreeFilter('^Period$')];
+
+    await actAsync(async () => render(<Profile showPeriod={true} />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+          <Profile>
+    `);
+
+    // Selecting a host instance inside of the hidden subtree selects the
+    // nearest element that is still in the tree.
+    const profileID = store.getElementIDAtIndex(0);
+    const day = dayRef.current;
+    const suspendedDay = suspendedDayRef.current;
+    expect(agent.getIDForHostInstance(day).id).toBe(profileID);
+    expect(agent.getIDForHostInstance(suspendedDay).id).toBe(profileID);
+
+    await actAsync(async () => render(<Profile showPeriod={false} />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <Profile>
+            <span>
+    `);
+
+    // The detached host instances are no longer tracked.
+    expect(agent.getIDForHostInstance(day)).toBe(null);
+    expect(agent.getIDForHostInstance(suspendedDay)).toBe(null);
+  });
+
+  // @reactVersion > 18.2
+  it('should filter a subtree of a Server Component by display name', async () => {
+    const ClientComponent = () => <div />;
+    const ServerPromise = Promise.resolve(<ClientComponent />);
+    ServerPromise._debugInfo = [
+      {
+        name: 'Layout',
+        env: 'Server',
+        owner: null,
+      },
+      {
+        name: 'Period',
+        env: 'Server',
+        owner: null,
+      },
+      {
+        name: 'DayPicker',
+        env: 'Server',
+        owner: null,
+      },
+    ];
+    const App = ({label}) => (
+      <React.Fragment>
+        {ServerPromise}
+        <ClientComponent key={label} />
+      </React.Fragment>
+    );
+
+    await actAsync(async () => render(<App label="a" />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+          ▾ <Layout> [Server]
+            ▾ <Period> [Server]
+              ▾ <DayPicker> [Server]
+                ▾ <ClientComponent>
+                    <div>
+          ▾ <ClientComponent key="a">
+              <div>
+    `);
+
+    await actAsync(
+      async () =>
+        (store.componentFilters = [
+          utils.createDisplayNameSubtreeFilter('^Period$'),
+        ]),
+    );
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+            <Layout> [Server]
+          ▾ <ClientComponent key="a">
+              <div>
+    `);
+
+    await actAsync(async () => render(<App label="b" />));
+    expect(store).toMatchInlineSnapshot(`
+      [root]
+        ▾ <App>
+            <Layout> [Server]
+          ▾ <ClientComponent key="b">
+              <div>
+    `);
+  });
+
   // Disabled: filtering by path was removed, source is now determined lazily, including symbolication if applicable
   // @reactVersion >= 16.0
   // eslint-disable-next-line jest/no-disabled-tests

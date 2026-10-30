@@ -25,6 +25,7 @@ import Toggle from '../Toggle';
 import {SettingsContext} from '../Settings/SettingsContext';
 import {
   ComponentFilterDisplayName,
+  ComponentFilterDisplayNameSubtree,
   ComponentFilterElementType,
   ComponentFilterHOC,
   ComponentFilterLocation,
@@ -152,6 +153,13 @@ export default function ComponentsSettings({
               isValid: true,
               value: '',
             };
+          } else if (type === ComponentFilterDisplayNameSubtree) {
+            cloned[index] = {
+              type: ComponentFilterDisplayNameSubtree,
+              isEnabled: componentFilter.isEnabled,
+              isValid: true,
+              value: '',
+            };
           } else if (type === ComponentFilterLocation) {
             cloned[index] = {
               type: ComponentFilterLocation,
@@ -215,6 +223,7 @@ export default function ComponentsSettings({
         const cloned: Array<ComponentFilter> = [...prevComponentFilters];
         if (
           componentFilter.type === ComponentFilterDisplayName ||
+          componentFilter.type === ComponentFilterDisplayNameSubtree ||
           componentFilter.type === ComponentFilterLocation
         ) {
           const index = prevComponentFilters.indexOf(componentFilter);
@@ -286,6 +295,7 @@ export default function ComponentsSettings({
             };
           } else if (
             componentFilter.type === ComponentFilterDisplayName ||
+            componentFilter.type === ComponentFilterDisplayNameSubtree ||
             componentFilter.type === ComponentFilterLocation
           ) {
             cloned[index] = {
@@ -414,6 +424,9 @@ export default function ComponentsSettings({
                     <option value={ComponentFilterLocation}>location</option>
                   */}
                   <option value={ComponentFilterDisplayName}>name</option>
+                  <option value={ComponentFilterDisplayNameSubtree}>
+                    subtree
+                  </option>
                   <option value={ComponentFilterElementType}>type</option>
                   <option value={ComponentFilterHOC}>hoc</option>
                   {resolvedEnvironmentNames.length > 0 && (
@@ -435,6 +448,8 @@ export default function ComponentsSettings({
                 {(componentFilter.type === ComponentFilterLocation ||
                   componentFilter.type === ComponentFilterDisplayName) &&
                   'matches'}
+                {componentFilter.type === ComponentFilterDisplayNameSubtree &&
+                  'root matches'}
                 {componentFilter.type === ComponentFilterActivitySlice &&
                   'within'}
               </td>
@@ -472,7 +487,9 @@ export default function ComponentsSettings({
                   </select>
                 )}
                 {(componentFilter.type === ComponentFilterLocation ||
-                  componentFilter.type === ComponentFilterDisplayName) && (
+                  componentFilter.type === ComponentFilterDisplayName ||
+                  componentFilter.type ===
+                    ComponentFilterDisplayNameSubtree) && (
                   <input
                     className={styles.Input}
                     type="text"

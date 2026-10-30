@@ -93,8 +93,9 @@ export const ComponentFilterLocation = 3;
 export const ComponentFilterHOC = 4;
 export const ComponentFilterEnvironmentName = 5;
 export const ComponentFilterActivitySlice = 6;
+export const ComponentFilterDisplayNameSubtree = 7;
 
-export type ComponentFilterType = 1 | 2 | 3 | 4 | 5 | 6;
+export type ComponentFilterType = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 // Hide all elements of types in this Set.
 // We hide host components only by default.
@@ -106,10 +107,11 @@ export type ElementTypeComponentFilter = {
 
 // Hide all elements with displayNames or paths matching one or more of the RegExps in this Set.
 // Path filters are only used when elements include debug source location.
+// Subtree filters also hide everything rendered inside of the matching elements.
 export type RegExpComponentFilter = {
   isEnabled: boolean,
   isValid: boolean,
-  type: 2 | 3,
+  type: 2 | 3 | 7,
   value: string,
 };
 

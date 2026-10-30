@@ -27,6 +27,7 @@ import {
   ComponentFilterLocation,
   ComponentFilterEnvironmentName,
   ComponentFilterActivitySlice,
+  ComponentFilterDisplayNameSubtree,
   ElementTypeClass,
   ElementTypeContext,
   ElementTypeFunction,
@@ -792,7 +793,10 @@ export function attach(
   const hideElementsWithPaths: Set<RegExp> = new Set();
   const hideElementsWithTypes: Set<ElementType> = new Set();
   const hideElementsWithEnvs: Set<string> = new Set();
+  const hideSubtreesWithDisplayNames: Set<RegExp> = new Set();
   let isInFocusedActivity: boolean = true;
+  // Set while reconciling the descendants of an element matched by a subtree filter.
+  let isInHiddenSubtree: boolean = false;
 
   // Highlight updates
   let traceUpdatesEnabled: boolean = false;
@@ -806,6 +810,8 @@ export function attach(
     hideElementsWithDisplayNames.clear();
     hideElementsWithPaths.clear();
     hideElementsWithEnvs.clear();
+    hideSubtreesWithDisplayNames.clear();
+    isInHiddenSubtree = false;
     const previousFocusedActivityID = focusedActivityID;
     focusedActivityID = null;
     focusedActivity = null;
@@ -835,6 +841,15 @@ export function attach(
           break;
         case ComponentFilterHOC:
           hideElementsWithDisplayNames.add(new RegExp('\\('));
+          break;
+        case ComponentFilterDisplayNameSubtree:
+          if (componentFilter.isValid && componentFilter.value !== '') {
+            const regExp = new RegExp(componentFilter.value, 'i');
+            // The matching element itself is hidden like with a display name filter.
+            // Its descendants are hidden while reconciling, see isInHiddenSubtree.
+            hideElementsWithDisplayNames.add(regExp);
+            hideSubtreesWithDisplayNames.add(regExp);
+          }
           break;
         case ComponentFilterEnvironmentName:
           hideElementsWithEnvs.add(componentFilter.value);
@@ -1029,7 +1044,7 @@ export function attach(
     data: ReactComponentInfo,
     secondaryEnv: null | string,
   ): boolean {
-    if (!isInFocusedActivity) {
+    if (!isInFocusedActivity || isInHiddenSubtree) {
       return true;
     }
 
@@ -1064,12 +1079,62 @@ export function attach(
     return false;
   }
 
+  // Whether a subtree filter hides this Server Component and everything it rendered.
+  function shouldHideSubtreeOfVirtual(data: ReactComponentInfo): boolean {
+    if (hideSubtreesWithDisplayNames.size === 0) {
+      return false;
+    }
+    const displayName = data.name;
+    if (displayName != null) {
+      // eslint-disable-next-line no-for-of-loops/no-for-of-loops
+      for (const displayNameRegExp of hideSubtreesWithDisplayNames) {
+        if (displayNameRegExp.test(displayName)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Whether a subtree filter hides this Fiber and all of its descendants.
+  // That's either because the Fiber itself matches, or because it was rendered
+  // by a Server Component that matches.
+  function shouldHideSubtreeOfFiber(fiber: Fiber): boolean {
+    if (hideSubtreesWithDisplayNames.size === 0 || fiber.tag === HostRoot) {
+      // It is never valid to filter the root element.
+      return false;
+    }
+    const displayName = getDisplayNameForFiber(fiber);
+    if (displayName != null) {
+      // eslint-disable-next-line no-for-of-loops/no-for-of-loops
+      for (const displayNameRegExp of hideSubtreesWithDisplayNames) {
+        if (displayNameRegExp.test(displayName)) {
+          return true;
+        }
+      }
+    }
+    const debugInfo = fiber._debugInfo;
+    if (debugInfo) {
+      for (let i = 0; i < debugInfo.length; i++) {
+        const debugEntry = debugInfo[i];
+        if (
+          !debugEntry.awaited &&
+          typeof debugEntry.name === 'string' &&
+          shouldHideSubtreeOfVirtual(debugEntry as any)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // NOTICE Keep in sync with get*ForFiber methods
   function shouldFilterFiber(fiber: Fiber): boolean {
     const {tag, type, key} = fiber;
 
     // It is never valid to filter the root element.
-    if (tag !== HostRoot && !isInFocusedActivity) {
+    if (tag !== HostRoot && (!isInFocusedActivity || isInHiddenSubtree)) {
       return true;
     }
 
@@ -1268,10 +1333,18 @@ export function attach(
 
     // Recursively clean up any filtered Fibers below this one as well since
     // we won't recordUnmount on those.
-    for (let child = fiber.child; child !== null; child = child.sibling) {
-      if (shouldFilterFiber(child)) {
-        untrackFiber(nearestInstance, child);
+    const stashedIsInHiddenSubtree = isInHiddenSubtree;
+    if (!isInHiddenSubtree && shouldHideSubtreeOfFiber(fiber)) {
+      isInHiddenSubtree = true;
+    }
+    try {
+      for (let child = fiber.child; child !== null; child = child.sibling) {
+        if (shouldFilterFiber(child)) {
+          untrackFiber(nearestInstance, child);
+        }
       }
+    } finally {
+      isInHiddenSubtree = stashedIsInHiddenSubtree;
     }
   }
 
@@ -3116,6 +3189,7 @@ export function attach(
     let previousVirtualInstanceFirstFiber: Fiber = firstChild;
     while (fiber !== null && fiber !== lastChild) {
       let level = 0;
+      let isInHiddenServerSubtree = false;
       if (fiber._debugInfo) {
         for (let i = 0; i < fiber._debugInfo.length; i++) {
           const debugEntry = fiber._debugInfo[i];
@@ -3142,6 +3216,15 @@ export function attach(
           }
           if (secondaryEnv !== null) {
             knownEnvironmentNames.add(secondaryEnv);
+          }
+          if (
+            isInHiddenServerSubtree ||
+            shouldHideSubtreeOfVirtual(componentInfo)
+          ) {
+            // Skip this Server Component and everything it rendered.
+            // The Fiber is hidden as a subtree root once we reconcile it.
+            isInHiddenServerSubtree = true;
+            continue;
           }
           if (shouldFilterVirtual(componentInfo, secondaryEnv)) {
             // Skip.
@@ -3268,7 +3351,10 @@ export function attach(
       isInFocusedActivity = true;
     }
 
-    const shouldIncludeInTree = !shouldFilterFiber(fiber);
+    const isHiddenSubtreeEntry =
+      !isInHiddenSubtree && shouldHideSubtreeOfFiber(fiber);
+    const shouldIncludeInTree =
+      !isHiddenSubtreeEntry && !shouldFilterFiber(fiber);
     let newInstance = null;
     let newSuspenseNode = null;
     if (shouldIncludeInTree) {
@@ -3325,11 +3411,13 @@ export function attach(
       fiber.tag === SuspenseComponent ||
       // Use to keep resuspended instances alive inside a SuspenseComponent.
       fiber.tag === OffscreenComponent ||
-      fiber.tag === LegacyHiddenComponent
+      fiber.tag === LegacyHiddenComponent ||
+      isHiddenSubtreeEntry
     ) {
       // If the parent is a Virtual Instance and we filtered this Fiber we include a
       // hidden node. We also include this if it's a Suspense boundary so we can track those
-      // in the Suspense tree.
+      // in the Suspense tree. The root of a hidden subtree also gets a hidden node so that
+      // we know to keep hiding its descendants when we update or unmount them.
       if (
         reconcilingParent !== null &&
         reconcilingParent.kind === VIRTUAL_INSTANCE &&
@@ -3396,11 +3484,16 @@ export function attach(
     const stashedSuspensePrevious = previouslyReconciledSiblingSuspenseNode;
     const stashedSuspenseRemaining = remainingReconcilingChildrenSuspenseNodes;
     const stashedIsInActivitySlice = isInFocusedActivity;
+    const stashedIsInHiddenSubtree = isInHiddenSubtree;
     if (newInstance !== null) {
       // Push a new DevTools instance parent while reconciling this subtree.
       reconcilingParent = newInstance;
       previouslyReconciledSibling = null;
       remainingReconcilingChildren = null;
+    }
+    if (isHiddenSubtreeEntry) {
+      // Hide everything below this Fiber too.
+      isInHiddenSubtree = true;
     }
     let shouldPopSuspenseNode = false;
     if (newSuspenseNode !== null) {
@@ -3557,6 +3650,7 @@ export function attach(
       }
     } finally {
       isInFocusedActivity = stashedIsInActivitySlice;
+      isInHiddenSubtree = stashedIsInHiddenSubtree;
       if (newInstance !== null) {
         reconcilingParent = stashedParent;
         previouslyReconciledSibling = stashedPrevious;
@@ -3590,6 +3684,7 @@ export function attach(
     const stashedSuspensePrevious = previouslyReconciledSiblingSuspenseNode;
     const stashedSuspenseRemaining = remainingReconcilingChildrenSuspenseNodes;
     const stashedIsInActivitySlice = isInFocusedActivity;
+    const stashedIsInHiddenSubtree = isInHiddenSubtree;
     const previousSuspendedBy = instance.suspendedBy;
     // Push a new DevTools instance parent while reconciling this subtree.
     reconcilingParent = instance;
@@ -3620,6 +3715,14 @@ export function attach(
         // Filtering nested Activity components inside the focused activity
         // is done in the frontend.
       }
+    }
+
+    if (
+      !isInHiddenSubtree &&
+      instance.kind === FILTERED_FIBER_INSTANCE &&
+      shouldHideSubtreeOfFiber(instance.data)
+    ) {
+      isInHiddenSubtree = true;
     }
 
     try {
@@ -3673,6 +3776,7 @@ export function attach(
         remainingReconcilingChildrenSuspenseNodes = stashedSuspenseRemaining;
       }
       isInFocusedActivity = stashedIsInActivitySlice;
+      isInHiddenSubtree = stashedIsInHiddenSubtree;
     }
     if (instance.kind === FIBER_INSTANCE) {
       recordUnmount(instance);
@@ -3987,6 +4091,7 @@ export function attach(
     let previousVirtualInstancePrevFirstFiber: null | Fiber = prevFirstChild;
     while (nextChild !== null && nextChild !== nextLastChild) {
       let level = 0;
+      let isInHiddenServerSubtree = false;
       if (nextChild._debugInfo) {
         for (let i = 0; i < nextChild._debugInfo.length; i++) {
           const debugEntry = nextChild._debugInfo[i];
@@ -4015,6 +4120,15 @@ export function attach(
           }
           if (secondaryEnv !== null) {
             knownEnvironmentNames.add(secondaryEnv);
+          }
+          if (
+            isInHiddenServerSubtree ||
+            shouldHideSubtreeOfVirtual(componentInfo)
+          ) {
+            // Skip this Server Component and everything it rendered.
+            // The Fiber is hidden as a subtree root once we reconcile it.
+            isInHiddenServerSubtree = true;
+            continue;
           }
           if (shouldFilterVirtual(componentInfo, secondaryEnv)) {
             continue;
@@ -4380,6 +4494,7 @@ export function attach(
     const stashedSuspensePrevious = previouslyReconciledSiblingSuspenseNode;
     const stashedSuspenseRemaining = remainingReconcilingChildrenSuspenseNodes;
     const stashedIsInActivitySlice = isInFocusedActivity;
+    const stashedIsInHiddenSubtree = isInHiddenSubtree;
     let updateFlags = NoUpdate;
     let shouldMeasureSuspenseNode = false;
     let shouldPopSuspenseNode = false;
@@ -4430,6 +4545,9 @@ export function attach(
           // is done in the frontend.
         }
       }
+    }
+    if (!isInHiddenSubtree && shouldHideSubtreeOfFiber(nextFiber)) {
+      isInHiddenSubtree = true;
     }
     try {
       trackDebugInfoFromLazyType(nextFiber);
@@ -4910,6 +5028,7 @@ export function attach(
         }
         isInFocusedActivity = stashedIsInActivitySlice;
       }
+      isInHiddenSubtree = stashedIsInHiddenSubtree;
     }
   }
 
@@ -5324,13 +5443,15 @@ export function attach(
   function getElementIDForHostInstance(
     publicInstance: HostInstance,
   ): number | null {
-    const instance = publicInstanceToDevToolsInstanceMap.get(publicInstance);
-    if (instance !== undefined) {
-      if (instance.kind === FILTERED_FIBER_INSTANCE) {
-        // A Filtered Fiber Instance will always have a Virtual Instance as a parent.
-        return (instance.parent as any as VirtualInstance).id;
+    let instance: void | null | DevToolsInstance =
+      publicInstanceToDevToolsInstanceMap.get(publicInstance);
+    // Filtered Fiber Instances (e.g. the root of a hidden subtree) aren't in the
+    // tree so we pick the nearest unfiltered parent instead.
+    while (instance != null) {
+      if (instance.kind !== FILTERED_FIBER_INSTANCE) {
+        return instance.id;
       }
-      return instance.id;
+      instance = instance.parent;
     }
     return null;
   }

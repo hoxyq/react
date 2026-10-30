@@ -275,6 +275,25 @@ export function createDisplayNameFilter(
   };
 }
 
+export function createDisplayNameSubtreeFilter(
+  source: string,
+  isEnabled: boolean = true,
+) {
+  const Types = require('react-devtools-shared/src/frontend/types');
+  let isValid = true;
+  try {
+    new RegExp(source); // eslint-disable-line no-new
+  } catch (error) {
+    isValid = false;
+  }
+  return {
+    type: Types.ComponentFilterDisplayNameSubtree,
+    isEnabled,
+    isValid,
+    value: source,
+  };
+}
+
 export function createHOCFilter(isEnabled: boolean = true) {
   const Types = require('react-devtools-shared/src/frontend/types');
   return {
