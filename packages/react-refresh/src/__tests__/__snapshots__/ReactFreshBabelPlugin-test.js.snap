@@ -74,6 +74,17 @@ while (item) {
 }
 `;
 
+exports[`ReactFreshBabelPlugin does not sign non-component functions calling Hook-like methods 1`] = `
+const setup = () => {
+  const gl = canvas.getContext('webgl2');
+  gl.useProgram(program);
+};
+function draw(gl, program) {
+  gl.useProgram(program);
+  this.gl.useProgram(program);
+}
+`;
+
 exports[`ReactFreshBabelPlugin generates signatures for function declarations calling hooks 1`] = `
 var _s = $RefreshSig$();
 export default function App() {
@@ -489,6 +500,42 @@ var Qux;
 var _c, _c2;
 $RefreshReg$(_c, "Hello");
 $RefreshReg$(_c2, "Bar");
+`;
+
+exports[`ReactFreshBabelPlugin signs components and Hooks calling Hook-like methods 1`] = `
+var _s = $RefreshSig$(),
+  _s2 = $RefreshSig$(),
+  _s3 = $RefreshSig$(),
+  _s4 = $RefreshSig$();
+export default function App() {
+  _s();
+  const utils = trpc.useUtils();
+  return <h1>{utils}</h1>;
+}
+_s(App, "useUtils{utils}", true);
+_c = App;
+export const Foo = _s2(React.memo(_c2 = _s2(() => {
+  _s2();
+  const utils = trpc.useUtils();
+  return <h1>{utils}</h1>;
+}, "useUtils{utils}", true)), "useUtils{utils}", true);
+_c3 = Foo;
+function useWebGL() {
+  _s3();
+  gl.useProgram(program);
+}
+_s3(useWebGL, "useProgram{}", true);
+function renderBar(props, ref) {
+  _s4();
+  React.useEffect(() => {});
+  return <h1 ref={ref} />;
+}
+_s4(renderBar, "useEffect{}");
+export const Bar = React.forwardRef(renderBar);
+var _c, _c2, _c3;
+$RefreshReg$(_c, "App");
+$RefreshReg$(_c2, "Foo$React.memo");
+$RefreshReg$(_c3, "Foo");
 `;
 
 exports[`ReactFreshBabelPlugin supports typescript namespace syntax 1`] = `

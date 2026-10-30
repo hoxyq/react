@@ -43,6 +43,33 @@ export default function (babel, opts = {}) {
     return typeof name === 'string' && name[0] >= 'A' && name[0] <= 'Z';
   }
 
+  function isHookishName(name) {
+    return /^use[A-Z]/.test(name);
+  }
+
+  // function foo() {}
+  // const foo = () => {}
+  // const foo = function() {}
+  // Other functions (e.g. callbacks passed to HOCs) are considered unnamed.
+  function getDeclaredFunctionName(fnPath) {
+    const node = fnPath.node;
+    switch (node.type) {
+      case 'FunctionDeclaration':
+        return node.id === null ? null : node.id.name;
+      case 'ArrowFunctionExpression':
+      case 'FunctionExpression':
+        if (
+          fnPath.parent.type === 'VariableDeclarator' &&
+          fnPath.parent.id.type === 'Identifier'
+        ) {
+          return fnPath.parent.id.name;
+        }
+        return null;
+      default:
+        return null;
+    }
+  }
+
   function findInnerComponents(inferredName, path, callback) {
     const node = path.node;
     switch (node.type) {
@@ -405,12 +432,33 @@ export default function (babel, opts = {}) {
           name = callee.property.name;
           break;
       }
-      if (name === null || !/^use[A-Z]/.test(name)) {
+      if (name === null || !isHookishName(name)) {
         return;
       }
       const fnScope = path.scope.getFunctionParent();
       if (fnScope === null) {
         return;
+      }
+      if (
+        callee.type === 'MemberExpression' &&
+        !(
+          callee.object.type === 'Identifier' &&
+          isComponentishName(callee.object.name)
+        )
+      ) {
+        // Unlike React.useState(), a call like gl.useProgram() may not be a
+        // Hook. We still treat it as one in case it's e.g. trpc.useUtils(),
+        // except in functions named like neither a component nor a Hook,
+        // since those can't call Hooks. Signing them would break code that
+        // stringifies them, e.g. to run in a Worker.
+        const fnName = getDeclaredFunctionName(fnScope.path);
+        if (
+          fnName !== null &&
+          !isComponentishName(fnName) &&
+          !isHookishName(fnName)
+        ) {
+          return;
+        }
       }
 
       // This is a Hook call. Record it.

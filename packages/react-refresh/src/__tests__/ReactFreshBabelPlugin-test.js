@@ -453,6 +453,50 @@ describe('ReactFreshBabelPlugin', () => {
     ).toMatchSnapshot();
   });
 
+  it('does not sign non-component functions calling Hook-like methods', () => {
+    // gl.useProgram() is not a Hook, and these functions can't call Hooks.
+    // A signature would break them if they're stringified for a Worker.
+    expect(
+      transform(`
+        const setup = () => {
+          const gl = canvas.getContext('webgl2');
+          gl.useProgram(program);
+        };
+
+        function draw(gl, program) {
+          gl.useProgram(program);
+          this.gl.useProgram(program);
+        }
+    `),
+    ).toMatchSnapshot();
+  });
+
+  it('signs components and Hooks calling Hook-like methods', () => {
+    expect(
+      transform(`
+        export default function App() {
+          const utils = trpc.useUtils();
+          return <h1>{utils}</h1>;
+        }
+
+        export const Foo = React.memo(() => {
+          const utils = trpc.useUtils();
+          return <h1>{utils}</h1>;
+        });
+
+        function useWebGL() {
+          gl.useProgram(program);
+        }
+
+        function renderBar(props, ref) {
+          React.useEffect(() => {});
+          return <h1 ref={ref} />;
+        }
+        export const Bar = React.forwardRef(renderBar);
+    `),
+    ).toMatchSnapshot();
+  });
+
   it('does not consider require-like methods to be HOCs', () => {
     // None of these were declared in this file.
     // It's bad to register them because that would trigger
