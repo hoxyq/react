@@ -115,6 +115,19 @@ For more details, see the [`react-devtools-core` documentation](https://github.c
 
 ## FAQ
 
+### The app doesn't start on Linux
+
+Some Linux distributions (for example, Ubuntu 24.04 and later) use AppArmor to restrict unprivileged user namespaces, which Electron's sandbox relies on. In that case `react-devtools` exits right after launch with an error like this:
+
+```
+[...:FATAL:setuid_sandbox_host.cc(...)] The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now. You need to make sure that .../electron/dist/chrome-sandbox is owned by root and has mode 4755.
+```
+
+To work around it, do one of the following:
+
+* Run `react-devtools --no-sandbox` to disable Chromium's sandbox for the app.
+* Keep the sandbox and make the helper binary from the error message owned by root, with the setuid bit: `sudo chown root:root <path>/chrome-sandbox && sudo chmod 4755 <path>/chrome-sandbox`. You'll need to do this again after reinstalling `react-devtools`.
+
 ### The React Tab Doesn't Show Up
 
 **If you are running your app from a local `file://` URL**, don't forget to check "Allow access to file URLs" on the Chrome Extensions settings page. You can find it by opening Settings > Extensions:

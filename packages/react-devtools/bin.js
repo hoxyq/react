@@ -30,7 +30,29 @@ if (notifier.update) {
 }
 
 const result = spawn.sync(electron, [require.resolve('./app')].concat(argv), {
-  stdio: 'ignore',
+  // Forward Electron's output, so that startup failures aren't silent.
+  stdio: ['ignore', 'inherit', 'inherit'],
 });
 
-process.exit(result.status);
+if (result.error) {
+  console.error(`Failed to start Electron: ${result.error.message}`);
+  process.exit(1);
+}
+
+if (result.status !== 0) {
+  if (result.signal) {
+    console.error(`Electron exited with signal ${result.signal}.`);
+  }
+
+  // Chromium aborts on startup if it can't set up its sandbox, for example
+  // when AppArmor restricts unprivileged user namespaces (Ubuntu 24.04+).
+  if (process.platform === 'linux' && !argv.includes('--no-sandbox')) {
+    console.error(
+      '\nIf the error above mentions the sandbox, try running ' +
+        '"react-devtools --no-sandbox". For more details, see ' +
+        'https://github.com/react/react/tree/main/packages/react-devtools#the-app-doesnt-start-on-linux',
+    );
+  }
+}
+
+process.exit(result.status === null ? 1 : result.status);
