@@ -70,6 +70,7 @@ export type CanViewElementSource = (
   source: ReactFunctionLocation | ReactCallSite,
   symbolicatedSource: ReactFunctionLocation | ReactCallSite | null,
 ) => boolean;
+export type OpenInEditor = (url: string) => void;
 
 export type Props = {
   bridge: FrontendBridge,
@@ -83,6 +84,9 @@ export type Props = {
   warnIfUnsupportedVersionDetected?: boolean,
   viewAttributeSourceFunction?: ?ViewAttributeSource,
   viewElementSourceFunction?: ?ViewElementSource,
+  // Opens the URL built from the configured code editor URL template (e.g. vscode://file/{path}).
+  // Defaults to window.open(), which doesn't work in every host (e.g. Firefox extension).
+  openInEditorFunction?: ?OpenInEditor,
   readOnly?: boolean,
   hideSettings?: boolean,
   hideToggleErrorAction?: boolean,
@@ -136,6 +140,10 @@ const suspenseTab = {
 
 const tabs = [componentsTab, profilerTab, suspenseTab];
 
+function defaultOpenInEditorFunction(url: string): void {
+  window.open(url);
+}
+
 export default function DevTools({
   bridge,
   browserTheme = 'light',
@@ -157,6 +165,7 @@ export default function DevTools({
   warnIfUnsupportedVersionDetected = false,
   viewAttributeSourceFunction,
   viewElementSourceFunction,
+  openInEditorFunction,
   readOnly,
   hideSettings,
   hideToggleErrorAction,
@@ -217,9 +226,14 @@ export default function DevTools({
   const viewElementSource = useMemo(
     () => ({
       canViewElementSourceFunction: canViewElementSourceFunction || null,
+      openInEditorFunction: openInEditorFunction || defaultOpenInEditorFunction,
       viewElementSourceFunction: viewElementSourceFunction || null,
     }),
-    [canViewElementSourceFunction, viewElementSourceFunction],
+    [
+      canViewElementSourceFunction,
+      openInEditorFunction,
+      viewElementSourceFunction,
+    ],
   );
 
   const contextMenu = useMemo(

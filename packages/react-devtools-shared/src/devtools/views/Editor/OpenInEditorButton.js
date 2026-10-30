@@ -12,6 +12,7 @@ import * as React from 'react';
 import Button from 'react-devtools-shared/src/devtools/views/Button';
 import ButtonIcon from 'react-devtools-shared/src/devtools/views/ButtonIcon';
 import ButtonLabel from 'react-devtools-shared/src/devtools/views/ButtonLabel';
+import ViewElementSourceContext from 'react-devtools-shared/src/devtools/views/Components/ViewElementSourceContext';
 
 import type {SourceSelection} from './EditorPane';
 import type {ReactFunctionLocation} from 'shared/ReactTypes';
@@ -29,6 +30,7 @@ function ActualOpenInEditorButton({
   source,
   className,
 }: Props): React.Node {
+  const {openInEditorFunction} = React.useContext(ViewElementSourceContext);
   let disable;
   if (source == null) {
     disable = true;
@@ -63,7 +65,7 @@ function ActualOpenInEditorButton({
           latestLocation,
         );
         if (!shouldDisableButton) {
-          window.open(url);
+          openInEditorFunction(String(url));
         }
       }}>
       <ButtonIcon type="editor" />

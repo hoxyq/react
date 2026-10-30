@@ -11,6 +11,7 @@ import * as React from 'react';
 
 import Button from 'react-devtools-shared/src/devtools/views/Button';
 import ButtonIcon from 'react-devtools-shared/src/devtools/views/ButtonIcon';
+import ViewElementSourceContext from './ViewElementSourceContext';
 
 import type {ReactFunctionLocation} from 'shared/ReactTypes';
 import type {SourceMappedLocation} from 'react-devtools-shared/src/symbolicateSource';
@@ -29,6 +30,7 @@ function OpenSymbolicatedSourceInEditorButton({
   symbolicatedSourcePromise,
 }: Props): React.Node {
   const symbolicatedSource = React.use(symbolicatedSourcePromise);
+  const {openInEditorFunction} = React.useContext(ViewElementSourceContext);
 
   const {url, shouldDisableButton} = checkConditions(
     editorURL,
@@ -38,7 +40,7 @@ function OpenSymbolicatedSourceInEditorButton({
   return (
     <Button
       disabled={shouldDisableButton}
-      onClick={() => window.open(url)}
+      onClick={() => openInEditorFunction(String(url))}
       title="Open in editor">
       <ButtonIcon type="editor" />
     </Button>

@@ -98,6 +98,19 @@ export function handleDevToolsPageMessage(message) {
       break;
     }
 
+    // The DevTools page can't use window.open() in Firefox, see openInEditorFunction in main/index.js.
+    case 'open-in-editor': {
+      const {
+        payload: {url},
+      } = message;
+
+      chrome.tabs.create({url}).catch(error => {
+        console.error('Failed to open in editor:', error);
+      });
+
+      break;
+    }
+
     case 'eval-in-inspected-window': {
       const {
         payload: {tabId, requestId, scriptId, args},

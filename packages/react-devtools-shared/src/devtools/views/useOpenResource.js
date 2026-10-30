@@ -26,9 +26,11 @@ const useOpenResource = (
   boolean, // isEnabled
   () => void, // Open Resource
 ] => {
-  const {canViewElementSourceFunction, viewElementSourceFunction} = useContext(
-    ViewElementSourceContext,
-  );
+  const {
+    canViewElementSourceFunction,
+    openInEditorFunction,
+    viewElementSourceFunction,
+  } = useContext(ViewElementSourceContext);
 
   const editorURL = useEditorURL();
 
@@ -63,11 +65,11 @@ const useOpenResource = (
     if (openInEditor !== null && !openInEditor.shouldDisableButton) {
       // If we have configured to always open in the code editor, we do so if we can.
       // Otherwise, we fallback to open in the local editor if possible (e.g. non-file urls).
-      window.open(openInEditor.url);
+      openInEditorFunction(String(openInEditor.url));
     } else if (viewElementSourceFunction != null && source != null) {
       viewElementSourceFunction(source, symbolicatedSource);
     }
-  }, [openInEditor, source, symbolicatedSource]);
+  }, [openInEditor, openInEditorFunction, source, symbolicatedSource]);
 
   return [linkIsEnabled, viewSource];
 };

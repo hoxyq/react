@@ -4,6 +4,7 @@
 import type {RootType} from 'react-dom/src/client/ReactDOMRoot';
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 import type {
+  OpenInEditor,
   TabID,
   ViewElementSource,
 } from 'react-devtools-shared/src/devtools/views/DevTools';
@@ -308,6 +309,21 @@ function createDevToolsInstance(): DevToolsInstance {
     );
   };
 
+  // Firefox loads the DevTools page as a hidden extension page, where window.open() doesn't work:
+  // https://bugzilla.mozilla.org/show_bug.cgi?id=1282021
+  // Ask the background script to open the code editor URL in a new tab instead.
+  const openInEditorFunction: OpenInEditor | null = __IS_FIREFOX__
+    ? (url: string) => {
+        chrome.runtime.sendMessage({
+          source: 'devtools-page',
+          payload: {
+            type: 'open-in-editor',
+            url,
+          },
+        });
+      }
+    : null;
+
   const root = createRoot(document.createElement('div'));
 
   const render = (overrideTab: TabID | null = mostRecentOverrideTab) => {
@@ -334,6 +350,7 @@ function createDevToolsInstance(): DevToolsInstance {
         // Firefox doesn't support chrome.devtools.panels.openResource yet
         canViewElementSourceFunction: () => __IS_CHROME__ || __IS_EDGE__,
         viewElementSourceFunction,
+        openInEditorFunction,
       }),
     );
   };

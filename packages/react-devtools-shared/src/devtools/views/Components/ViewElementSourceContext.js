@@ -13,11 +13,13 @@ import {createContext} from 'react';
 
 import type {
   CanViewElementSource,
+  OpenInEditor,
   ViewElementSource,
 } from 'react-devtools-shared/src/devtools/views/DevTools';
 
 export type Context = {
   canViewElementSourceFunction: CanViewElementSource | null,
+  openInEditorFunction: OpenInEditor,
   viewElementSourceFunction: ViewElementSource | null,
 };
 
