@@ -96,10 +96,12 @@ export default function SidebarSelectedFiberInfo(): React.Node {
   for (i = 0; i < commitIndices.length; i++) {
     const commitIndex = commitIndices[i];
 
-    const {duration, timestamp} = profilerStore.getCommitData(
-      rootID as any as number,
-      commitIndex,
-    );
+    // Show the selected Fiber's own durations (like the hover tooltip does),
+    // not the duration of the whole commit.
+    const {fiberActualDurations, fiberSelfDurations, timestamp} =
+      profilerStore.getCommitData(rootID as any as number, commitIndex);
+    const actualDuration = fiberActualDurations.get(selectedFiberID) || 0;
+    const selfDuration = fiberSelfDurations.get(selectedFiberID) || 0;
 
     listItems.push(
       <button
@@ -111,7 +113,8 @@ export default function SidebarSelectedFiberInfo(): React.Node {
             : styles.Commit
         }
         onClick={() => selectCommitIndex(commitIndex)}>
-        {formatTime(timestamp)}s for {formatDuration(duration)}ms
+        {formatTime(timestamp)}s for {formatDuration(selfDuration)}ms of{' '}
+        {formatDuration(actualDuration)}ms
       </button>,
     );
   }
