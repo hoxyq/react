@@ -29,6 +29,9 @@ export default function DebuggingSettings({
   const [appendComponentStack, setAppendComponentStack] = useState(
     usedHookSettings.appendComponentStack,
   );
+  const [collapseComponentStack, setCollapseComponentStack] = useState(
+    usedHookSettings.collapseComponentStack,
+  );
   const [breakOnConsoleErrors, setBreakOnConsoleErrors] = useState(
     usedHookSettings.breakOnConsoleErrors,
   );
@@ -48,6 +51,7 @@ export default function DebuggingSettings({
   useEffect(() => {
     store.updateHookSettings({
       appendComponentStack,
+      collapseComponentStack,
       breakOnConsoleErrors,
       showInlineWarningsAndErrors,
       hideConsoleLogsInStrictMode,
@@ -56,6 +60,7 @@ export default function DebuggingSettings({
   }, [
     store,
     appendComponentStack,
+    collapseComponentStack,
     breakOnConsoleErrors,
     showInlineWarningsAndErrors,
     hideConsoleLogsInStrictMode,
@@ -75,6 +80,31 @@ export default function DebuggingSettings({
             className={styles.SettingRowCheckbox}
           />
           Append component stacks to console warnings and errors
+        </label>
+      </div>
+
+      <div
+        className={
+          !appendComponentStack
+            ? `${styles.SettingDisabled} ${styles.SettingWrapper}`
+            : styles.SettingWrapper
+        }>
+        <label
+          className={
+            !appendComponentStack
+              ? `${styles.SettingDisabled} ${styles.SettingRow}`
+              : styles.SettingRow
+          }>
+          <input
+            type="checkbox"
+            checked={collapseComponentStack}
+            disabled={!appendComponentStack}
+            onChange={({currentTarget}) =>
+              setCollapseComponentStack(currentTarget.checked)
+            }
+            className={styles.SettingRowCheckbox}
+          />
+          Collapse appended component stacks
         </label>
       </div>
 

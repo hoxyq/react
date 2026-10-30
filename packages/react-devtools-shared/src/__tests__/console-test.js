@@ -725,6 +725,101 @@ describe('console', () => {
     ]);
   });
 
+  // @reactVersion >= 18.0
+  it('should print appended component stacks in a collapsed group if collapseComponentStack is enabled', () => {
+    global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.appendComponentStack = true;
+    global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.collapseComponentStack = true;
+
+    const Intermediate = ({children}) => children;
+    const Parent = ({children}) => (
+      <Intermediate>
+        <Child />
+      </Intermediate>
+    );
+    const Child = ({children}) => {
+      console.error('error');
+      console.warn('warn');
+      return null;
+    };
+
+    act(() => render(<Parent />));
+
+    // Logs without a component stack are not grouped.
+    console.error('error outside of render');
+
+    const expectedStackLabel = supportsOwnerStacks
+      ? 'Stack'
+      : 'Component Stack';
+    const expectedStack = supportsOwnerStacks
+      ? '\n    in Child (at **)\n    in Parent (at **)'
+      : '\n    in Child (at **)\n    in Intermediate (at **)\n    in Parent (at **)';
+
+    expect(global.consoleErrorMock.mock.calls).toEqual([
+      ['error'],
+      ['error outside of render'],
+    ]);
+    expect(global.consoleWarnMock.mock.calls).toEqual([['warn']]);
+
+    expect(global.consoleGroupCollapsedMock.mock.calls).toEqual([
+      [expectedStackLabel],
+      [expectedStackLabel],
+    ]);
+    expect(
+      global.consoleLogMock.mock.calls.map(args =>
+        args.map(normalizeCodeLocInfo),
+      ),
+    ).toEqual([[expectedStack], [expectedStack]]);
+    expect(global.consoleGroupEndMock).toHaveBeenCalledTimes(2);
+
+    // The stack is printed in a group that is opened right after the message.
+    const [errorOrder] = global.consoleErrorMock.mock.invocationCallOrder;
+    const [groupOrder] =
+      global.consoleGroupCollapsedMock.mock.invocationCallOrder;
+    const [stackOrder] = global.consoleLogMock.mock.invocationCallOrder;
+    const [groupEndOrder] = global.consoleGroupEndMock.mock.invocationCallOrder;
+    expect(errorOrder).toBeLessThan(groupOrder);
+    expect(groupOrder).toBeLessThan(stackOrder);
+    expect(stackOrder).toBeLessThan(groupEndOrder);
+  });
+
+  it('should dim collapsed component stacks during strict mode double log', () => {
+    global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.appendComponentStack = true;
+    global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.collapseComponentStack = true;
+    global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.hideConsoleLogsInStrictMode = false;
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    const Parent = ({children}) => <Child />;
+    const Child = ({children}) => {
+      console.error('error');
+      return null;
+    };
+
+    act(() =>
+      root.render(
+        <React.StrictMode>
+          <Parent />
+        </React.StrictMode>,
+      ),
+    );
+
+    const expectedStackLabel = supportsOwnerStacks
+      ? 'Stack'
+      : 'Component Stack';
+
+    expect(global.consoleErrorMock.mock.calls).toEqual([
+      ['error'],
+      ['\x1b[2;38;2;124;124;124m%s\x1b[0m', 'error'],
+    ]);
+    expect(global.consoleGroupCollapsedMock.mock.calls).toEqual([
+      [expectedStackLabel],
+      ['\x1b[2;38;2;124;124;124m%s\x1b[0m', expectedStackLabel],
+    ]);
+    expect(global.consoleLogMock).toHaveBeenCalledTimes(2);
+    expect(global.consoleGroupEndMock).toHaveBeenCalledTimes(2);
+  });
+
   it('should not dim console logs if disableSecondConsoleLogDimmingInStrictMode is enabled', () => {
     global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.appendComponentStack = false;
     global.__REACT_DEVTOOLS_GLOBAL_HOOK__.settings.hideConsoleLogsInStrictMode = false;

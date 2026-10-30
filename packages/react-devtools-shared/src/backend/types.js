@@ -532,6 +532,7 @@ export type DevToolsHook = {
 
 export type DevToolsHookSettings = {
   appendComponentStack: boolean,
+  collapseComponentStack: boolean,
   breakOnConsoleErrors: boolean,
   showInlineWarningsAndErrors: boolean,
   hideConsoleLogsInStrictMode: boolean,

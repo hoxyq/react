@@ -29,6 +29,10 @@ async function messageListener(event: UnknownMessageEvent) {
           typeof settings.appendComponentStack === 'boolean'
             ? settings.appendComponentStack
             : true,
+        collapseComponentStack:
+          typeof settings.collapseComponentStack === 'boolean'
+            ? settings.collapseComponentStack
+            : false,
         breakOnConsoleErrors:
           typeof settings.breakOnConsoleErrors === 'boolean'
             ? settings.breakOnConsoleErrors

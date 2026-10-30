@@ -147,14 +147,20 @@ function patchConsoleForTestingBeforeHookInstallation() {
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
   const originalConsoleLog = console.log;
+  const originalConsoleGroupCollapsed = console.groupCollapsed;
+  const originalConsoleGroupEnd = console.groupEnd;
 
   const consoleErrorMock = jest.fn();
   const consoleWarnMock = jest.fn();
   const consoleLogMock = jest.fn();
+  const consoleGroupCollapsedMock = jest.fn();
+  const consoleGroupEndMock = jest.fn();
 
   global.consoleErrorMock = consoleErrorMock;
   global.consoleWarnMock = consoleWarnMock;
   global.consoleLogMock = consoleLogMock;
+  global.consoleGroupCollapsedMock = consoleGroupCollapsedMock;
+  global.consoleGroupEndMock = consoleGroupEndMock;
 
   console.error = (...args) => {
     let firstArg = args[0];
@@ -203,12 +209,22 @@ function patchConsoleForTestingBeforeHookInstallation() {
     consoleLogMock(...args);
     originalConsoleLog.apply(console, args);
   };
+  console.groupCollapsed = (...args) => {
+    consoleGroupCollapsedMock(...args);
+    originalConsoleGroupCollapsed.apply(console, args);
+  };
+  console.groupEnd = (...args) => {
+    consoleGroupEndMock(...args);
+    originalConsoleGroupEnd.apply(console, args);
+  };
 }
 
 function unpatchConsoleAfterTesting() {
   delete global.consoleErrorMock;
   delete global.consoleWarnMock;
   delete global.consoleLogMock;
+  delete global.consoleGroupCollapsedMock;
+  delete global.consoleGroupEndMock;
 }
 
 beforeEach(() => {
@@ -253,6 +269,7 @@ beforeEach(() => {
 
   installHook(global, getDefaultComponentFilters(), {
     appendComponentStack: true,
+    collapseComponentStack: false,
     breakOnConsoleErrors: false,
     showInlineWarningsAndErrors: true,
     hideConsoleLogsInStrictMode: false,

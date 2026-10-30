@@ -416,6 +416,16 @@ export function installHook(
       'warn',
     ];
 
+    // Used to print appended component stacks in a collapsed group.
+    // Captured together with the methods we patch, so that printing the stack
+    // doesn't go through other console overrides, like the Strict Mode one.
+    const originalGroupCollapsed = targetConsole.groupCollapsed;
+    const originalGroupEnd = targetConsole.groupEnd;
+    const originalLog = targetConsole.log;
+    const supportsGroup =
+      typeof originalGroupCollapsed === 'function' &&
+      typeof originalGroupEnd === 'function';
+
     // eslint-disable-next-line no-for-of-loops/no-for-of-loops
     for (const method of consoleMethodsToOverrideForErrorsAndWarnings) {
       const originalMethod = targetConsole[method];
@@ -435,6 +445,7 @@ export function installHook(
         }
 
         let injectedComponentStackAsFakeError = false;
+        let componentStackLabel = '';
         let alreadyHasComponentStack = false;
         if (settings.appendComponentStack) {
           const lastArg = args.length > 0 ? args[args.length - 1] : null;
@@ -479,6 +490,9 @@ export function installHook(
                 // Empty string means we have a match but no component stack.
                 // We don't need to look in other renderers but we also don't add anything.
                 if (componentStack !== '') {
+                  componentStackLabel = enableOwnerStacks
+                    ? 'Stack'
+                    : 'Component Stack';
                   // Create a fake Error so that when we print it we get native source maps. Every
                   // browser will print the .stack property of the error and then parse it back for source
                   // mapping. Rather than print the internal slot. So it doesn't matter that the internal
@@ -496,9 +510,7 @@ export function installHook(
                       ? 'Error Stack'
                       : 'Error Component Stack'; // This gets printed
                   } else {
-                    fakeError.name = enableOwnerStacks
-                      ? 'Stack'
-                      : 'Component Stack'; // This gets printed
+                    fakeError.name = componentStackLabel; // This gets printed
                   }
                   // In Chromium, the stack property needs to start with ^[\w.]*Error\b to trigger stack
                   // formatting. Otherwise it is left alone. So we prefix it. Otherwise we just override it
@@ -554,10 +566,23 @@ export function installHook(
           debugger;
         }
 
+        let collapsedComponentStack = null;
         if (
-          isRunningDuringStrictModeInvocation &&
-          !settings.disableSecondConsoleLogDimmingInStrictMode
+          injectedComponentStackAsFakeError &&
+          settings.collapseComponentStack &&
+          supportsGroup &&
+          args.length > 1
         ) {
+          // Print the message without the component stack and put the stack in a collapsed
+          // group right after it, so that long stacks don't flood the console.
+          collapsedComponentStack = args.pop();
+          injectedComponentStackAsFakeError = false;
+        }
+
+        const shouldDimLog =
+          isRunningDuringStrictModeInvocation &&
+          !settings.disableSecondConsoleLogDimmingInStrictMode;
+        if (shouldDimLog) {
           // Dim the text color of the double logs if we're not hiding them.
           // Firefox doesn't support ANSI escape sequences
           if (__IS_FIREFOX__) {
@@ -584,6 +609,29 @@ export function installHook(
           }
         } else {
           originalMethod(...args);
+        }
+
+        if (collapsedComponentStack !== null) {
+          if (!shouldDimLog) {
+            originalGroupCollapsed(componentStackLabel);
+          } else if (__IS_FIREFOX__) {
+            originalGroupCollapsed(
+              '%c%s',
+              FIREFOX_CONSOLE_DIMMING_COLOR,
+              componentStackLabel,
+            );
+          } else {
+            originalGroupCollapsed(
+              ANSI_STYLE_DIMMING_TEMPLATE,
+              componentStackLabel,
+            );
+          }
+          try {
+            originalLog(collapsedComponentStack);
+          } finally {
+            // Never leave the group open, or every following log would end up inside it.
+            originalGroupEnd();
+          }
         }
       };
 
@@ -635,6 +683,7 @@ export function installHook(
     // Set default settings
     hook.settings = {
       appendComponentStack: true,
+      collapseComponentStack: false,
       breakOnConsoleErrors: false,
       showInlineWarningsAndErrors: true,
       hideConsoleLogsInStrictMode: false,
