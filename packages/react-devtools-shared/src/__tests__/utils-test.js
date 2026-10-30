@@ -470,6 +470,25 @@ function f() { }
       const run = url => symbolicateSource(fetch3, url, 4, 10);
       await expect(run('invalid-base.js')).resolves.toStrictEqual(result);
     });
+
+    it('should resolve relative sources of inline source maps against the script URL', async () => {
+      // Dev servers like Vite inline source maps as data: URLs and list
+      // sources relative to the served module.
+      const inlineSourceMapURL = `data:application/json;base64,${btoa(
+        `{"version":3,"file":"a.mjs","sources":["a.mts"],"names":[],"mappings":";;AAAA,cAAsB;AAAtB,SAAgB,CAAC,KAAI,CAAC"}`,
+      )}`;
+      const fs4 = {
+        'http://localhost:5173/src/a.mts?t=1': `${source}${inlineSourceMapURL}`,
+        [inlineSourceMapURL]: atob(inlineSourceMapURL.split(',')[1]),
+      };
+      const fetch4 = async url => fs4[url] || null;
+      await expect(
+        symbolicateSource(fetch4, 'http://localhost:5173/src/a.mts?t=1', 4, 10),
+      ).resolves.toStrictEqual({
+        location: ['', 'http://localhost:5173/src/a.mts', 1, 17],
+        ignored: false,
+      });
+    });
   });
 
   describe('formatConsoleArguments', () => {

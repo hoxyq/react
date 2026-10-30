@@ -138,10 +138,13 @@ export async function symbolicateSource(
 
             // This is a relative path
             // possiblyURL = x.js.map, sourceMapURL = https://react.dev/script.js.map
-            const absoluteSourcePath = new URL(
-              possiblyURL,
-              sourceMapURL,
-            ).toString();
+            // Inline source maps (data: URLs) can't be used as a base URL, so we
+            // resolve against the script instead, like browsers do.
+            // possiblyURL = App.jsx, sourceURL = http://localhost:5173/src/App.jsx
+            const baseURL = sourceMapURL.startsWith('data:')
+              ? sourceURL
+              : sourceMapURL;
+            const absoluteSourcePath = new URL(possiblyURL, baseURL).toString();
             return {
               location: [functionName, absoluteSourcePath, line, column],
               ignored,
