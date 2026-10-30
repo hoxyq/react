@@ -56,6 +56,55 @@ const defaultProfilingSettings: ProfilingSettings = {
   recordChangeDescriptions: false,
 };
 
+// Keeps calling a hook that was installed before DevTools replaced it,
+// the same way React would have called it, so that whatever decorated it
+// (e.g. React Refresh tracking renderers and roots) keeps working.
+function forwardToPreviousHook(hook: DevToolsHook, previousHook: Object) {
+  // The previous hook assigns its own renderer IDs.
+  const previousRendererIDs = new Map<RendererID, mixed>();
+
+  const inject = hook.inject;
+  hook.inject = function (renderer: ReactRenderer) {
+    const previousRendererID =
+      typeof previousHook.inject === 'function'
+        ? previousHook.inject(renderer)
+        : undefined;
+    const rendererID = inject(renderer);
+    if (rendererID != null) {
+      previousRendererIDs.set(rendererID, previousRendererID);
+    }
+    return rendererID;
+  };
+
+  // React calls these with the renderer ID as the first argument.
+  [
+    'onScheduleFiberRoot',
+    'onCommitFiberRoot',
+    'onPostCommitFiberRoot',
+    'onCommitFiberUnmount',
+    'setStrictMode',
+  ].forEach(methodName => {
+    const previousMethod = previousHook[methodName];
+    if (typeof previousMethod !== 'function') {
+      return;
+    }
+    const method = (hook as any)[methodName];
+    (hook as any)[methodName] = function (
+      rendererID: RendererID,
+      ...args: Array<mixed>
+    ) {
+      previousMethod.call(
+        previousHook,
+        previousRendererIDs.get(rendererID),
+        ...args,
+      );
+      if (typeof method === 'function') {
+        return method(rendererID, ...args);
+      }
+    };
+  });
+}
+
 export function installHook(
   target: any,
   componentFiltersOrComponentFiltersPromise:
@@ -67,8 +116,28 @@ export function installHook(
   shouldStartProfilingNow: boolean = false,
   profilingSettings: ProfilingSettings = defaultProfilingSettings,
 ): DevToolsHook | null {
+  // If DevTools wasn't loaded first, React Refresh installs a minimal hook of
+  // its own, which the DevTools backend can't subscribe to (no sub/emit).
+  // Replace such a hook, but keep calling it so Fast Refresh keeps working.
+  let previousHook = null;
   if (target.hasOwnProperty('__REACT_DEVTOOLS_GLOBAL_HOOK__')) {
-    return null;
+    const existingHook = target.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      target,
+      '__REACT_DEVTOOLS_GLOBAL_HOOK__',
+    );
+    if (
+      existingHook == null ||
+      // Installed by DevTools already.
+      typeof existingHook.sub === 'function' ||
+      // Opted out of DevTools.
+      existingHook.isDisabled ||
+      descriptor == null ||
+      !descriptor.configurable
+    ) {
+      return null;
+    }
+    previousHook = existingHook;
   }
 
   function detectReactBuildType(renderer: ReactRenderer): ReactBuildType {
@@ -630,6 +699,10 @@ export function installHook(
     onPostCommitFiberRoot,
     setStrictMode,
   };
+
+  if (previousHook !== null) {
+    forwardToPreviousHook(hook, previousHook);
+  }
 
   if (maybeSettingsOrSettingsPromise == null) {
     // Set default settings
