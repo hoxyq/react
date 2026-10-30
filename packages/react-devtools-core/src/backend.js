@@ -16,6 +16,7 @@ import setupNativeStyleEditor from 'react-devtools-shared/src/backend/NativeStyl
 import {
   getDefaultComponentFilters,
   getIsReloadAndProfileSupported,
+  persistableComponentFilters,
 } from 'react-devtools-shared/src/utils';
 
 import type {BackendBridge} from 'react-devtools-shared/src/bridge';
@@ -41,6 +42,9 @@ type ConnectOptions = {
   isAppActive?: () => boolean,
   websocket?: ?WebSocket,
   onSettingsUpdated?: (settings: $ReadOnly<DevToolsHookSettings>) => void,
+  onComponentFiltersUpdated?: (
+    componentFilters: Array<ComponentFilter>,
+  ) => void,
   isReloadAndProfileSupported?: boolean,
   isProfiling?: boolean,
   onReloadAndProfile?: (recordChangeDescriptions: boolean) => void,
@@ -103,6 +107,7 @@ export function connectToDevTools(options: ?ConnectOptions) {
     retryConnectionDelay = 2000,
     isAppActive = () => true,
     onSettingsUpdated,
+    onComponentFiltersUpdated,
     isReloadAndProfileSupported = getIsReloadAndProfileSupported(),
     isProfiling,
     onReloadAndProfile,
@@ -194,8 +199,15 @@ export function connectToDevTools(options: ?ConnectOptions) {
       (componentFilters: Array<ComponentFilter>) => {
         // Save filter changes in memory, in case DevTools is reloaded.
         // In that case, the renderer will already be using the updated values.
-        // We'll lose these in between backend reloads but that can't be helped.
         savedComponentFilters = componentFilters;
+
+        // Let the embedder persist them, so they can be passed back to initialize()
+        // and survive backend reloads.
+        if (onComponentFiltersUpdated != null) {
+          onComponentFiltersUpdated(
+            persistableComponentFilters(componentFilters),
+          );
+        }
       },
     );
 
@@ -337,6 +349,9 @@ type ConnectWithCustomMessagingOptions = {
   nativeStyleEditorValidAttributes?: $ReadOnlyArray<string>,
   resolveRNStyle?: ResolveNativeStyle,
   onSettingsUpdated?: (settings: $ReadOnly<DevToolsHookSettings>) => void,
+  onComponentFiltersUpdated?: (
+    componentFilters: Array<ComponentFilter>,
+  ) => void,
   isReloadAndProfileSupported?: boolean,
   isProfiling?: boolean,
   onReloadAndProfile?: (recordChangeDescriptions: boolean) => void,
@@ -350,6 +365,7 @@ export function connectWithCustomMessagingProtocol({
   nativeStyleEditorValidAttributes,
   resolveRNStyle,
   onSettingsUpdated,
+  onComponentFiltersUpdated,
   isReloadAndProfileSupported = getIsReloadAndProfileSupported(),
   isProfiling,
   onReloadAndProfile,
@@ -381,8 +397,15 @@ export function connectWithCustomMessagingProtocol({
     (componentFilters: Array<ComponentFilter>) => {
       // Save filter changes in memory, in case DevTools is reloaded.
       // In that case, the renderer will already be using the updated values.
-      // We'll lose these in between backend reloads but that can't be helped.
       savedComponentFilters = componentFilters;
+
+      // Let the embedder persist them, so they can be passed back to initialize()
+      // and survive backend reloads.
+      if (onComponentFiltersUpdated != null) {
+        onComponentFiltersUpdated(
+          persistableComponentFilters(componentFilters),
+        );
+      }
     },
   );
 

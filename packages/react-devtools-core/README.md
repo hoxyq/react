@@ -30,7 +30,7 @@ if (process.env.NODE_ENV !== 'production') {
 | `settings`                | Optional. If not specified, or received as null, then default settings are used. Can be plain object or a Promise that resolves with the [plain settings object](#Settings). If Promise rejects, the console will not be patched and some console features from React DevTools will not work. |
 | `shouldStartProfilingNow` | Optional. Whether to start profiling immediately after installing the hook. Defaults to `false`. |
 | `profilingSettings`       | Optional. Profiling settings used when `shouldStartProfilingNow` is `true`. Defaults to `{ recordChangeDescriptions: false }`. |
-| `componentFilters`        | Optional. Array or Promise that resolves to an array of component filters to apply before DevTools connects. Defaults to the built-in host component filter. See [Component filters](#component-filters) for the full spec. |
+| `componentFilters`        | Optional. Array or Promise that resolves to an array of component filters to apply before DevTools connects. Defaults to the built-in host component filter. See [Component filters](#component-filters) for the full spec. Pass the filters received by `onComponentFiltersUpdated` here to keep them between reloads. |
 
 #### `Settings`
 | Spec                                                                                                                                                                           | Default value                                                                                                                                                        |
@@ -61,6 +61,7 @@ Each filter object must include `type` and `isEnabled`. Some filters also requir
 | `useHttps`             | `false`       | Socket connection to frontend should use secure protocol (wss).                                                           |
 | `websocket`            |               | Custom `WebSocket` connection to frontend; overrides `host` and `port` settings.                                          |
 | `onSettingsUpdated`    |               | A callback that will be called when the user updates the settings in the UI. You can use it for persisting user settings. |                                                                                         |
+| `onComponentFiltersUpdated` |          | A callback that will be called with the component filters when the user updates them in the UI. You can use it for persisting component filters and passing them to `initialize` on the next reload. Location and activity slice filters are not included. |
 
 
 ### `connectWithCustomMessagingProtocol` options
@@ -70,6 +71,7 @@ Each filter object must include `type` and `isEnabled`. Some filters also requir
 | `onUnsubscribe`     | Function, which receives listener (function) as an argument. Called when backend unsubscribes to messages from the other end (frontend).                       |
 | `onMessage`         | Function, which receives 2 arguments: event (string) and payload (any). Called when backend emits a message, which should be sent to the frontend.             |
 | `onSettingsUpdated` | A callback that will be called when the user updates the settings in the UI. You can use it for persisting user settings.                                      |
+| `onComponentFiltersUpdated` | A callback that will be called with the component filters when the user updates them in the UI. You can use it for persisting component filters and passing them to `initialize` on the next reload. Location and activity slice filters are not included. |
 
 Unlike `connectToDevTools`, `connectWithCustomMessagingProtocol` returns a callback, which can be used for unsubscribing the backend from the global DevTools hook.
 
