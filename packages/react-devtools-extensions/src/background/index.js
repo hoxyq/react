@@ -49,6 +49,7 @@ function registerTab(tabId: number) {
 function registerExtensionPort(port: ExtensionRuntimePort, tabId: number) {
   // $FlowFixMe[incompatible-type]
   ports[tabId].extension = port;
+  updateInspectComponentContextMenuItemVisibility();
 
   port.onDisconnect.addListener(() => {
     // This should delete disconnectPipe from ports dictionary
@@ -57,6 +58,7 @@ function registerExtensionPort(port: ExtensionRuntimePort, tabId: number) {
 
     // $FlowFixMe[incompatible-type]
     ports[tabId].extension = null;
+    updateInspectComponentContextMenuItemVisibility();
   });
 }
 
@@ -268,6 +270,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 chrome.tabs.onActivated.addListener(({tabId: activeTabId}) => {
+  updateInspectComponentContextMenuItemVisibility();
+
   for (const registeredTabId in ports) {
     if (
       ports[registeredTabId].proxy != null &&
@@ -282,4 +286,65 @@ chrome.tabs.onActivated.addListener(({tabId: activeTabId}) => {
       ports[registeredTabId].extension.postMessage({event});
     }
   }
+});
+
+const INSPECT_COMPONENT_CONTEXT_MENU_ITEM_ID =
+  'react-devtools-inspect-component';
+let isInspectComponentContextMenuItemCreated = false;
+
+// Extensions can't open the browser DevTools, so the context menu item is only shown
+// while the browser DevTools are open for an active tab, since the context menu can only be opened in one.
+function updateInspectComponentContextMenuItemVisibility() {
+  if (!isInspectComponentContextMenuItemCreated) {
+    return;
+  }
+
+  chrome.tabs.query({active: true}).then(activeTabs => {
+    chrome.contextMenus.update(INSPECT_COMPONENT_CONTEXT_MENU_ITEM_ID, {
+      visible: activeTabs.some(
+        tab => tab.id != null && ports[String(tab.id)]?.extension != null,
+      ),
+    });
+  });
+}
+
+// Context menu items persist across service worker restarts,
+// so remove the one that was created by the previous instance first.
+chrome.contextMenus.removeAll(() => {
+  chrome.contextMenus.create(
+    {
+      id: INSPECT_COMPONENT_CONTEXT_MENU_ITEM_ID,
+      title: 'Inspect React component',
+      contexts: [
+        'page',
+        'selection',
+        'link',
+        'editable',
+        'image',
+        'video',
+        'audio',
+      ],
+      visible: false,
+    },
+    () => {
+      isInspectComponentContextMenuItemCreated = true;
+      updateInspectComponentContextMenuItemVisibility();
+    },
+  );
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const tabId = tab?.id;
+  if (
+    info.menuItemId !== INSPECT_COMPONENT_CONTEXT_MENU_ITEM_ID ||
+    tabId == null ||
+    // React DevTools only track the context menu target in the top-level document.
+    (info.frameId != null && info.frameId !== 0)
+  ) {
+    return;
+  }
+
+  ports[String(tabId)]?.extension?.postMessage({
+    event: 'extensionInspectContextMenuTarget',
+  });
 });

@@ -230,6 +230,7 @@ export type BackendEvents = {
 
   extensionComponentsPanelShown: void,
   extensionComponentsPanelHidden: void,
+  extensionInspectContextMenuTarget: void,
 
   resumeElementPolling: void,
   pauseElementPolling: void,

@@ -13,6 +13,7 @@ export type EvalScriptIds =
   | 'reload'
   | 'setBrowserSelectionFromReact'
   | 'setReactSelectionFromBrowser'
+  | 'setReactSelectionFromContextMenuTarget'
   | 'viewAttributeSource'
   | 'viewElementSource';
 
@@ -62,6 +63,21 @@ export const evalScripts: {[key: EvalScriptIds]: EvalScriptEntry} = {
     code: () =>
       '(window.__REACT_DEVTOOLS_GLOBAL_HOOK__ && window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 !== $0) ?' +
       '(window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = $0, true) :' +
+      'false',
+  },
+  setReactSelectionFromContextMenuTarget: {
+    fn: () => {
+      const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      const target = window.__REACT_DEVTOOLS_CONTEXT_MENU_TARGET__;
+      if (hook == null || target == null) {
+        return false;
+      }
+      hook.$0 = target;
+      return true;
+    },
+    code: () =>
+      '(window.__REACT_DEVTOOLS_GLOBAL_HOOK__ && window.__REACT_DEVTOOLS_CONTEXT_MENU_TARGET__ != null) ?' +
+      '(window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = window.__REACT_DEVTOOLS_CONTEXT_MENU_TARGET__, true) :' +
       'false',
   },
   viewAttributeSource: {

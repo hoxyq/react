@@ -119,11 +119,40 @@ interface ExtensionTabs {
       windowId: number,
     }) => void,
   >;
+  /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/query} */
+  query(queryInfo: {active?: boolean}): Promise<Array<ExtensionTab>>;
+}
+
+/** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus} */
+// TODO: Only covers used properties. Extend as needed.
+interface ExtensionContextMenus {
+  /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus/create} */
+  create(
+    createProperties: {
+      id: string,
+      title: string,
+      contexts: Array<string>,
+      visible?: boolean,
+    },
+    callback?: () => void,
+  ): string | number;
+  /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus/onClicked} */
+  onClicked: ExtensionEvent<
+    (
+      info: {menuItemId: string | number, frameId?: number},
+      tab?: ExtensionTab,
+    ) => void,
+  >;
+  /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus/removeAll} */
+  removeAll(callback: () => void): void;
+  /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus/update} */
+  update(id: string | number, updateProperties: {visible?: boolean}): void;
 }
 
 interface ExtensionAPI {
   /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/action} */
   action: ExtensionAction;
+  contextMenus: ExtensionContextMenus;
   devtools: ExtensionDevtools;
   /** @see {@link https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions} */
   permissions: $FlowFixMe;

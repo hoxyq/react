@@ -124,6 +124,15 @@ function setup(hook: ?DevToolsHook) {
     },
   );
 
+  // Remember the element on which the context menu was opened last,
+  // so that the "Inspect React component" context menu item can select it.
+  const handleContextMenu = (event: MouseEvent) => {
+    window.__REACT_DEVTOOLS_CONTEXT_MENU_TARGET__ = event.composed
+      ? event.composedPath()[0]
+      : event.target;
+  };
+  window.addEventListener('contextmenu', handleContextMenu, true);
+
   let didCleanup = false;
   let unsubscribeShutdownListener: (() => void) | null = null;
   const cleanup = () => {
@@ -134,6 +143,8 @@ function setup(hook: ?DevToolsHook) {
 
     unsubscribeRendererListener();
     unsubscribeBackendInstallationListener();
+    window.removeEventListener('contextmenu', handleContextMenu, true);
+    delete window.__REACT_DEVTOOLS_CONTEXT_MENU_TARGET__;
     unsubscribeShutdownListener?.();
     unsubscribeShutdownListener = null;
 

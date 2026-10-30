@@ -38,6 +38,7 @@ import * as parseHookNames from 'react-devtools-shared/src/hooks/parseHookNames'
 import {
   setBrowserSelectionFromReact,
   setReactSelectionFromBrowser,
+  setReactSelectionFromContextMenuTarget,
 } from './elementSelection';
 import {viewAttributeSource} from './sourceSelection';
 
@@ -174,6 +175,20 @@ function createBridge(): FrontendBridge {
     'syncSelectionToBuiltinElementsPanel',
     setBrowserSelectionFromReact,
   );
+
+  // Sent by the background script when "Inspect React component" is chosen in the context menu of the page.
+  bridge.addListener('extensionInspectContextMenuTarget', () => {
+    setReactSelectionFromContextMenuTarget(() => {
+      // The selection is checked asynchronously, so this Bridge could have been shut down
+      // in the meantime, for example when the inspected page navigated to another document.
+      if (devToolsInstance?.bridge === bridge) {
+        bridge.send('syncSelectionFromBuiltinElementsPanel');
+        // Firefox and Chromium-based browsers before 140 can't switch to the panel,
+        // the selection will be there once the user opens the Components panel.
+        componentsPanel?.show?.();
+      }
+    });
+  });
 
   bridge.addListener('extensionBackendInitialized', () => {
     // Initialize the renderer's trace-updates setting.

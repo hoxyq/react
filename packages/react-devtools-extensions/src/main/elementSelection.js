@@ -30,3 +30,19 @@ export function setReactSelectionFromBrowser(onSelectionChanged) {
     },
   );
 }
+
+export function setReactSelectionFromContextMenuTarget(onSelectionChanged) {
+  // When the user chooses "Inspect React component" in the context menu of the page,
+  // copy the element it was opened for over to the hook object so that we can sync the selection.
+  evalInInspectedWindow(
+    'setReactSelectionFromContextMenuTarget',
+    [],
+    (hasContextMenuTarget, evalError) => {
+      if (evalError) {
+        console.error(evalError);
+      } else if (hasContextMenuTarget) {
+        onSelectionChanged();
+      }
+    },
+  );
+}
