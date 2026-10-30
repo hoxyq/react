@@ -473,7 +473,7 @@ export default function Tree(): React.Node {
         <div className={styles.SearchInput}>
           {store.supportsClickToInspect && (
             <Fragment>
-              <InspectHostNodesToggle />
+              <InspectHostNodesToggle containerRef={treeRef} />
               <div className={styles.VRule} />
             </Fragment>
           )}
