@@ -10,7 +10,7 @@
 
 'use strict';
 
-import './dynamicallyInjectContentScripts';
+import './unregisterDynamicContentScripts';
 import './tabsManager';
 
 import {
