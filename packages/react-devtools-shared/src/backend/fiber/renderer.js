@@ -4973,7 +4973,14 @@ export function attach(
     ) {
       // We may have already queued up some operations before the frontend connected
       // If so, let the frontend know about them.
-      localPendingOperationsQueue.forEach(operations => {
+      const lastIndex = localPendingOperationsQueue.length - 1;
+      localPendingOperationsQueue.forEach((operations, index) => {
+        if (index === lastIndex) {
+          // The tree was mounted before we knew if there's a selection to restore.
+          // Match it right before the last operations so that the frontend
+          // already knows about the matched element when it's asked to select it.
+          updateTrackedPathStateForMountedTree();
+        }
         hook.emit('operations', operations);
       });
     } else {
@@ -4982,6 +4989,10 @@ export function attach(
       if (trackedPath !== null) {
         mightBeOnTrackedPath = true;
       }
+      // We might be walking roots that we've already walked before, e.g. when
+      // a new frontend connects. Reset pseudo counters so that the roots get
+      // the same pseudo keys again and the selection can be restored.
+      rootDisplayNameCounter.clear();
       // If we have not been profiling, then we can just walk the tree and build up its current state as-is.
       hook.getFiberRoots(rendererID).forEach(root => {
         const current = root.current;
@@ -7685,11 +7696,7 @@ export function attach(
       if (expectedFrame === undefined) {
         throw new Error('Expected to see a frame at the next depth.');
       }
-      if (
-        actualFrame.index === expectedFrame.index &&
-        actualFrame.key === expectedFrame.key &&
-        actualFrame.displayName === expectedFrame.displayName
-      ) {
+      if (isSamePathFrame(actualFrame, expectedFrame)) {
         // We have our next match.
         trackedPathMatchFiber = fiber;
         if (fiberInstance !== null && fiberInstance.kind === FIBER_INSTANCE) {
@@ -7739,11 +7746,7 @@ export function attach(
       if (expectedFrame === undefined) {
         throw new Error('Expected to see a frame at the next depth.');
       }
-      if (
-        actualFrame.index === expectedFrame.index &&
-        actualFrame.key === expectedFrame.key &&
-        actualFrame.displayName === expectedFrame.displayName
-      ) {
+      if (isSamePathFrame(actualFrame, expectedFrame)) {
         // We have our next match.
         trackedPathMatchFiber = null; // Don't bother looking in Fibers anymore. We're deeper now.
         trackedPathMatchInstance = virtualInstance;
@@ -7780,6 +7783,107 @@ export function attach(
     // updateTrackedPathStateBeforeMount() told us whether to match siblings.
     // Now that we're entering siblings, let's use that information.
     mightBeOnTrackedPath = mightSiblingsBeOnTrackedPath;
+  }
+
+  // Usually we match the tracked path while mounting the tree. But the tree
+  // might have been mounted before we knew the path, e.g. when React rendered
+  // before DevTools connected. In that case we look for the best match in the
+  // tree that is already mounted, like the mount would have.
+  function updateTrackedPathStateForMountedTree() {
+    const path = trackedPath;
+    if (path === null) {
+      return;
+    }
+    hook.getFiberRoots(rendererID).forEach(root => {
+      const rootInstance = rootToFiberInstanceMap.get(root);
+      if (
+        trackedPathMatchInstance !== null ||
+        rootInstance === undefined ||
+        !isSamePathFrame(getPathFrame(root.current), path[0])
+      ) {
+        return;
+      }
+      let matchFiber: Fiber | null = root.current;
+      let matchInstance: FiberInstance | VirtualInstance = rootInstance;
+      let matchDepth = 0;
+      while (matchFiber !== null && matchDepth < path.length - 1) {
+        const expectedFrame = path[matchDepth + 1];
+        let child: Fiber | null = matchFiber.child;
+        while (
+          child !== null &&
+          !isSamePathFrame(getPathFrame(child), expectedFrame)
+        ) {
+          child = child.sibling;
+        }
+        if (child === null) {
+          break;
+        }
+        matchFiber = child;
+        matchDepth++;
+        const childInstance = findFiberInstanceBelow(matchInstance, child);
+        if (childInstance !== null) {
+          matchInstance = childInstance;
+        }
+      }
+      // The path might end with Virtual Instances below the matched Fiber.
+      while (matchDepth < path.length - 1) {
+        const expectedFrame = path[matchDepth + 1];
+        let virtualChild: VirtualInstance | null = null;
+        for (
+          let child = matchInstance.firstChild;
+          child !== null;
+          child = child.nextSibling
+        ) {
+          if (
+            child.kind === VIRTUAL_INSTANCE &&
+            isSamePathFrame(getVirtualPathFrame(child), expectedFrame)
+          ) {
+            virtualChild = child;
+            break;
+          }
+        }
+        if (virtualChild === null) {
+          break;
+        }
+        matchFiber = null; // Don't bother looking in Fibers anymore. We're deeper now.
+        matchInstance = virtualChild;
+        matchDepth++;
+      }
+      trackedPathMatchFiber = matchFiber;
+      trackedPathMatchInstance = matchInstance;
+      trackedPathMatchDepth = matchDepth;
+    });
+  }
+
+  // Finds the unfiltered instance of a Fiber below the instance of one of its
+  // ancestors, when the Fibers in between are all filtered out.
+  function findFiberInstanceBelow(
+    parentInstance: DevToolsInstance,
+    fiber: Fiber,
+  ): FiberInstance | null {
+    let child = parentInstance.firstChild;
+    while (child !== null) {
+      if (child.kind === FIBER_INSTANCE) {
+        if (child.data === fiber || child.data === fiber.alternate) {
+          return child;
+        }
+      } else {
+        const instance = findFiberInstanceBelow(child, fiber);
+        if (instance !== null) {
+          return instance;
+        }
+      }
+      child = child.nextSibling;
+    }
+    return null;
+  }
+
+  function isSamePathFrame(actual: PathFrame, expected: PathFrame): boolean {
+    return (
+      actual.index === expected.index &&
+      actual.key === expected.key &&
+      actual.displayName === expected.displayName
+    );
   }
 
   // Roots don't have a real persistent identity.

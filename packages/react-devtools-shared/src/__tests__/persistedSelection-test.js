@@ -84,7 +84,7 @@ describe('Persisted selection', () => {
 
   // Emulates reloading the page. The app, React, and the DevTools hook,
   // backend and frontend are all created again. Only sessionStorage survives.
-  function reload(renderApp: () => void) {
+  function reload(renderApp: () => void, connectDevToolsFirst: boolean) {
     bridge.shutdown();
     act(() => roots.forEach(root => root.unmount()));
     roots = [];
@@ -100,8 +100,14 @@ describe('Persisted selection', () => {
     React = require('react');
     ReactDOMClient = require('react-dom/client');
 
-    connectDevTools();
-    renderApp();
+    if (connectDevToolsFirst) {
+      connectDevTools();
+      renderApp();
+    } else {
+      // React usually renders before the DevTools backend gets injected.
+      renderApp();
+      connectDevTools();
+    }
   }
 
   // Selecting an element in the Components tree makes the frontend inspect it.
@@ -220,67 +226,108 @@ describe('Persisted selection', () => {
     `);
   });
 
-  // @reactVersion >= 18.0
-  it('should restore the selection after a reload', () => {
-    render(<App items={['a', 'b', 'c']} />);
-    selectElement(getElementID('Item', 'b'));
-    persistSelection();
+  describe.each([
+    ['before', true],
+    ['after', false],
+  ])('when DevTools connects %s React renders', (_, connectDevToolsFirst) => {
+    // @reactVersion >= 18.0
+    it('should restore the selection after a reload', () => {
+      render(<App items={['a', 'b', 'c']} />);
+      selectElement(getElementID('Item', 'b'));
+      persistSelection();
 
-    reload(() => render(<App items={['a', 'b', 'c']} />));
-    expect(getSelectedElement()).toBe('<Item key="b">');
-  });
+      reload(
+        () => render(<App items={['a', 'b', 'c']} />),
+        connectDevToolsFirst,
+      );
+      expect(getSelectedElement()).toBe('<Item key="b">');
+    });
 
-  // @reactVersion >= 18.0
-  it('should select the closest match if the selected element is gone after a reload', () => {
-    render(<App items={['a', 'b', 'c']} />);
-    selectElement(getElementID('Item', 'b'));
-    persistSelection();
+    // @reactVersion >= 18.0
+    it('should select the closest match if the selected element is gone after a reload', () => {
+      render(<App items={['a', 'b', 'c']} />);
+      selectElement(getElementID('Item', 'b'));
+      persistSelection();
 
-    reload(() => render(<App items={['a']} />));
-    expect(getSelectedElement()).toBe('<List>');
-  });
+      reload(() => render(<App items={['a']} />), connectDevToolsFirst);
+      expect(getSelectedElement()).toBe('<List>');
+    });
 
-  // @reactVersion >= 18.0
-  it('should select the restored element once it mounts', () => {
-    render(<App items={['a', 'b', 'c']} />);
-    selectElement(getElementID('Item', 'b'));
-    persistSelection();
+    // @reactVersion >= 18.0
+    it('should select the restored element once it mounts', () => {
+      render(<App items={['a', 'b', 'c']} />);
+      selectElement(getElementID('Item', 'b'));
+      persistSelection();
 
-    reload(() => render(<App items={[]} />));
-    expect(getSelectedElement()).toBe('<List>');
+      reload(() => render(<App items={[]} />), connectDevToolsFirst);
+      expect(getSelectedElement()).toBe('<List>');
 
-    render(<App items={['a', 'b', 'c']} />);
-    expect(getSelectedElement()).toBe('<Item key="b">');
-  });
+      render(<App items={['a', 'b', 'c']} />);
+      expect(getSelectedElement()).toBe('<Item key="b">');
+    });
 
-  // @reactVersion >= 18.0
-  it('should stop restoring the selection once another element is selected', () => {
-    render(<App items={['a', 'b', 'c']} />);
-    selectElement(getElementID('Item', 'b'));
-    persistSelection();
+    // @reactVersion >= 18.0
+    it('should stop restoring the selection once another element is selected', () => {
+      render(<App items={['a', 'b', 'c']} />);
+      selectElement(getElementID('Item', 'b'));
+      persistSelection();
 
-    reload(() => render(<App items={[]} />));
-    expect(getSelectedElement()).toBe('<List>');
+      reload(() => render(<App items={[]} />), connectDevToolsFirst);
+      expect(getSelectedElement()).toBe('<List>');
 
-    selectElement(getElementID('App'));
-    render(<App items={['a', 'b', 'c']} />);
-    expect(getSelectedElement()).toBe('<List>');
-  });
+      selectElement(getElementID('App'));
+      render(<App items={['a', 'b', 'c']} />);
+      expect(getSelectedElement()).toBe('<List>');
+    });
 
-  // @reactVersion >= 18.0
-  it('should restore the selection in the right root when roots have the same name', () => {
-    render(<App items={['a', 'b']} />, 0);
-    render(<App items={['a', 'b']} />, 1);
-    selectElement(getElementIDs('Item', 'b')[1]);
-    persistSelection();
-
-    reload(() => {
+    // @reactVersion >= 18.0
+    it('should restore the selection in the right root when roots have the same name', () => {
       render(<App items={['a', 'b']} />, 0);
       render(<App items={['a', 'b']} />, 1);
+      selectElement(getElementIDs('Item', 'b')[1]);
+      persistSelection();
+
+      reload(() => {
+        render(<App items={['a', 'b']} />, 0);
+        render(<App items={['a', 'b']} />, 1);
+      }, connectDevToolsFirst);
+      expect(store.lastSelectedHostInstanceElementId).toBe(
+        getElementIDs('Item', 'b')[1],
+      );
     });
-    expect(store.lastSelectedHostInstanceElementId).toBe(
-      getElementIDs('Item', 'b')[1],
-    );
+
+    // @reactVersion >= 19.0
+    it('should restore the selection of a Server Component', () => {
+      const ServerApp = () => {
+        const child = <Item label="server" />;
+        const promise: any = Promise.resolve(child);
+        // Mark it as resolved so that React can unwrap it synchronously.
+        promise.status = 'fulfilled';
+        promise.value = child;
+        promise._debugInfo = [
+          {name: 'ServerComponent', env: 'Server', owner: null},
+        ];
+        return promise;
+      };
+
+      render(<ServerApp />);
+      selectElement(getElementID('ServerComponent'));
+      persistSelection();
+
+      reload(() => render(<ServerApp />), connectDevToolsFirst);
+      expect(getSelectedElement()).toBe('<ServerComponent>');
+    });
+  });
+
+  // @reactVersion >= 18.0
+  it('should restore the selection after DevTools is reopened', () => {
+    render(<App items={['a', 'b', 'c']} />);
+    selectElement(getElementID('Item', 'b'));
+    persistSelection();
+
+    bridge.shutdown();
+    connectDevTools();
+    expect(getSelectedElement()).toBe('<Item key="b">');
   });
 
   // @reactVersion >= 18.0
