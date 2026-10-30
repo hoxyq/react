@@ -444,15 +444,19 @@ function useDebugValue(value: any, formatterFn: ?(value: any) => any) {
 
 function useCallback<T>(callback: T, inputs: Array<mixed> | void | null): T {
   const hook = nextHook();
+  // Return the memoized callback, like React did during the inspected render.
+  // The new callback closes over this dispatcher's no-op state setters, so it
+  // must not leak out if the component stores it somewhere during render.
+  const value = hook !== null ? hook.memoizedState[0] : callback;
   hookLog.push({
     displayName: null,
     primitive: 'Callback',
     stackError: new Error(),
-    value: hook !== null ? hook.memoizedState[0] : callback,
+    value,
     debugInfo: null,
     dispatcherHookName: 'Callback',
   });
-  return callback;
+  return value;
 }
 
 function useMemo<T>(

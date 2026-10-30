@@ -769,6 +769,36 @@ describe('ReactHooksInspectionIntegration', () => {
     `);
   });
 
+  // See https://github.com/react/react/issues/25367
+  it('should return the memoized callback from useCallback', async () => {
+    let increment;
+    function Foo() {
+      const [count, setCount] = React.useState(0);
+      const memoizedIncrement = React.useCallback(() => {
+        setCount(c => c + 1);
+      }, []);
+      // Render side effect that exposes the callback outside of React.
+      increment = memoizedIncrement;
+      return count;
+    }
+    let renderer;
+    await act(() => {
+      renderer = ReactTestRenderer.create(<Foo />, {
+        unstable_isConcurrent: true,
+      });
+    });
+    expect(renderer).toMatchRenderedOutput('0');
+
+    const committedIncrement = increment;
+    const childFiber = renderer.root.findByType(Foo)._currentFiber();
+    const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
+    expect(tree[1].value).toBe(committedIncrement);
+    expect(increment).toBe(committedIncrement);
+
+    await act(() => increment());
+    expect(renderer).toMatchRenderedOutput('1');
+  });
+
   it('should inspect the value of the current provider in useContext', async () => {
     const MyContext = React.createContext('default');
     const ThemeContext = React.createContext('default');
